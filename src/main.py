@@ -7,6 +7,7 @@ import logging
 from src.utils.config import ConfigLoader
 from src.core.network import ContinualLearningNetwork
 from src.core.trainer import ContinualTrainer
+from src.data.dataloader import DataManager
 
 def setup_logging(config):
     """Setup logging configuration"""
@@ -65,11 +66,33 @@ def main():
         
         logging.info("Model and trainer initialized successfully")
         
-        # TODO: Add data loading and training loop here
-        # This will be implemented when we create the data loading modules
+        # Initialize data manager
+        data_manager = DataManager(config['data']['data'])
+        
+        # Example training loop (assuming sequential tasks)
+        tasks = ["task1", "task2", "task3"]  # Define your tasks
+        
+        for task_id in tasks:
+            logging.info(f"Starting training for task: {task_id}")
+            
+            # Get data loaders for current task
+            train_loader, val_loader, test_loader = data_manager.get_task_loaders(task_id)
+            
+            # Train on current task
+            trainer.train_task(
+                task_id=task_id,
+                train_loader=train_loader,
+                val_loader=val_loader
+            )
+            
+            # Evaluate on test set
+            test_loss = trainer._validate(test_loader)
+            logging.info(f"Test loss for task {task_id}: {test_loss:.4f}")
+            
+        logging.info("Training completed successfully")
         
     except Exception as e:
-        logging.error(f"Error during initialization: {str(e)}", exc_info=True)
+        logging.error(f"Error during training: {str(e)}", exc_info=True)
         raise
 
 if __name__ == "__main__":
