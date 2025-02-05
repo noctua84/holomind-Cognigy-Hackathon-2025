@@ -1,0 +1,30 @@
+# Core network architecture configuration
+network:
+  input_dim: 784  # Example for MNIST
+  feature_dim: 256
+  output_dim: 10
+  
+  feature_extractor:
+    hidden_layers: [512, 256]
+    activation: "relu"
+    dropout: 0.2
+    batch_norm: true
+  
+  task_columns:
+    hidden_dims: [256, 128, 64]
+    activation: "relu"
+    dropout: 0.2
+    lateral_connections: true
+    lateral_scale: 0.1
+  
+  memory:
+    size: 1000
+    feature_dim: 256
+    num_heads: 8
+    dropout: 0.1
+    trainable: true
+    
+  ewc:
+    lambda: 0.4  # Importance of old task preservation
+    min_importance: 0.1  # Minimum importance threshold
+    update_frequency: 100  # Update Fisher information every N steps 

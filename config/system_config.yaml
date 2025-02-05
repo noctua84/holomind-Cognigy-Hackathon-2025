@@ -1,0 +1,28 @@
+# System and resource management configuration
+system:
+  compute:
+    device: "cuda"  # or "cpu", "mps"
+    precision: "float32"  # or "float16", "bfloat16"
+    cudnn_benchmark: true
+    deterministic: false
+    
+  memory:
+    gpu_memory_fraction: 0.9
+    empty_cache_frequency: 100  # steps
+    gradient_checkpointing: false
+    
+  parallel:
+    distributed_training: false
+    num_gpus: 1
+    backend: "nccl"
+    
+  optimization:
+    mixed_precision: true
+    gradient_accumulation_steps: 1
+    compile_model: false  # torch.compile()
+    
+  profiling:
+    enabled: false
+    profile_memory: true
+    profile_cuda: true
+    trace_execution: false 

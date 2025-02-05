@@ -1,0 +1,32 @@
+# Data handling and preprocessing configuration
+data:
+  datasets:
+    root_dir: "data/"
+    train_split: 0.8
+    val_split: 0.1
+    test_split: 0.1
+    
+  preprocessing:
+    normalization:
+      type: "standard"  # or "minmax"
+      per_feature: true
+      
+    augmentation:
+      enabled: true
+      methods:
+        - name: "random_crop"
+          params:
+            size: [28, 28]
+            padding: 4
+        - name: "random_rotation"
+          params:
+            degrees: 15
+        - name: "random_horizontal_flip"
+          params:
+            p: 0.5
+            
+  dataloader:
+    num_workers: 4
+    pin_memory: true
+    prefetch_factor: 2
+    persistent_workers: true 

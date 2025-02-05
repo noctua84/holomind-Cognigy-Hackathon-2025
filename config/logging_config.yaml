@@ -1,0 +1,34 @@
+# Logging and monitoring configuration
+logging:
+  tensorboard:
+    enabled: true
+    log_dir: "runs/"
+    flush_secs: 10
+    update_frequency: 100  # steps
+    
+    track:
+      - loss
+      - accuracy
+      - gradients
+      - weights
+      - memory_usage
+      - fisher_values
+      
+  mlflow:
+    enabled: true
+    experiment_name: "holomind_v3"
+    tracking_uri: "sqlite:///mlflow.db"
+    
+    params:
+      log_model: true
+      log_artifacts: true
+      
+  checkpoints:
+    dir: "checkpoints/"
+    format: "torch"  # or "safetensors"
+    compression: true
+    
+  monitoring:
+    memory_tracking: true
+    gpu_tracking: true
+    profile_execution: false 
