@@ -1,0 +1,45 @@
+monitoring:
+  tensorboard:
+    enabled: true
+    log_dir: "runs/"
+    flush_secs: 10
+    update_frequency: 100  # steps
+    
+    track:
+      - loss
+      - accuracy
+      - gradients
+      - weights
+      - memory_usage
+      - fisher_values
+      
+  visualization:
+    output_dir: "visualizations/"
+    formats: ["png", "pdf"]
+    dpi: 300
+    
+    plots:
+      task_performance:
+        enabled: true
+        update_frequency: 10  # epochs
+      
+      memory_usage:
+        enabled: true
+        update_frequency: 100  # steps
+      
+      forgetting_analysis:
+        enabled: true
+        update_frequency: 1  # epochs
+        
+  system_monitoring:
+    enabled: true
+    memory_tracking: true
+    gpu_tracking: true
+    cpu_tracking: true
+    disk_tracking: true
+    
+    sampling_rate: 10  # seconds
+    alert_thresholds:
+      memory_usage: 0.9  # 90% usage
+      gpu_memory: 0.8
+      cpu_usage: 0.95 

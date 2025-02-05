@@ -1,0 +1,16 @@
+database:
+  postgres:
+    dbname: "holomind"
+    user: "postgres"
+    password: "your_password"  # Should be in environment variable
+    host: "localhost"
+    port: 5432
+    
+  mongodb:
+    uri: "mongodb://localhost:27017/"
+    database: "holomind"
+    
+  checkpoints:
+    dir: "checkpoints/"
+    format: "torch"
+    compression: true 

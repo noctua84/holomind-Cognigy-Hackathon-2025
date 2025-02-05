@@ -2,12 +2,14 @@ import torch
 import torch.optim as optim
 from pathlib import Path
 import logging
+from datetime import datetime
 
 # Project imports
 from src.utils.config import ConfigLoader
 from src.core.network import ContinualLearningNetwork
 from src.core.trainer import ContinualTrainer
 from src.data.dataloader import DataManager
+from src.database.manager import DatabaseManager
 
 def setup_logging(config):
     """Setup logging configuration"""
@@ -44,6 +46,16 @@ def main():
     logging.info(f"Using device: {device}")
     
     try:
+        # Initialize database manager
+        db_manager = DatabaseManager(config['database'])
+        
+        # Start experiment
+        experiment_name = f"holomind_experiment_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        db_manager.start_experiment(
+            name=experiment_name,
+            model_config=config['model']
+        )
+        
         # Initialize model with configurations
         model = ContinualLearningNetwork(config['model']['network'])
         model = model.to(device)
@@ -78,12 +90,30 @@ def main():
             # Get data loaders for current task
             train_loader, val_loader, test_loader = data_manager.get_task_loaders(task_id)
             
-            # Train on current task
-            trainer.train_task(
-                task_id=task_id,
-                train_loader=train_loader,
-                val_loader=val_loader
-            )
+            for epoch in range(config['training']['training']['epochs']):
+                # Train on current task
+                train_loss, val_loss, accuracy = trainer.train_task(
+                    task_id=task_id,
+                    train_loader=train_loader,
+                    val_loader=val_loader
+                )
+                
+                # Log metrics
+                metrics = {
+                    'loss': train_loss,
+                    'val_loss': val_loss if val_loader else None,
+                    'accuracy': accuracy
+                }
+                db_manager.log_training_metrics(task_id, epoch, metrics)
+                
+                # Save checkpoint periodically
+                if (epoch + 1) % config['training']['training']['checkpointing']['save_frequency'] == 0:
+                    db_manager.save_model_checkpoint(
+                        task_id=task_id,
+                        epoch=epoch,
+                        state_dict=model.state_dict(),
+                        metrics=metrics
+                    )
             
             # Evaluate on test set
             test_loss = trainer._validate(test_loader)

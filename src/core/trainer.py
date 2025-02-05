@@ -3,6 +3,8 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 from tqdm import tqdm
+from src.monitoring.metrics import MetricsTracker
+from src.monitoring.visualization import PerformanceVisualizer
 
 class ContinualTrainer:
     """Trainer class for continuous learning with HoloMind"""
@@ -17,6 +19,10 @@ class ContinualTrainer:
         self.current_task = None
         self.ewc_lambda = config['training']['ewc_lambda']
         self.criterion = nn.CrossEntropyLoss()  # Add default criterion
+        
+        # Initialize monitoring
+        self.metrics_tracker = MetricsTracker(config['monitoring'])
+        self.visualizer = PerformanceVisualizer(config['monitoring'])
         
     def train_task(self, 
                    task_id: str,
@@ -49,6 +55,31 @@ class ContinualTrainer:
             # Prepare EWC loss for next task at the end of training
             if epoch == epochs - 1:
                 self.model.prepare_ewc_loss(train_loader, self.criterion)
+            
+            # Log metrics
+            step = epoch + len(self.metrics_tracker.metrics_history.get(task_id, []))
+            metrics = {
+                'train_loss': train_loss / len(train_loader),
+                'train_accuracy': None,  # Assuming no accuracy metric in the training loop
+                'val_loss': val_loss if val_loader else None,
+                'val_accuracy': None  # Assuming no accuracy metric in the validation loop
+            }
+            self.metrics_tracker.log_training_metrics(metrics, task_id, step)
+            
+            # Log gradients
+            self.metrics_tracker.log_model_gradients(self.model, step)
+            
+            # Generate visualizations periodically
+            if epoch % self.config['monitoring']['visualization']['plots']['task_performance']['update_frequency'] == 0:
+                self.visualizer.plot_task_performance(
+                    self.metrics_tracker.metrics_history,
+                    save_path=f'task_performance_epoch_{epoch}.png'
+                )
+                
+                self.visualizer.plot_memory_usage(
+                    self.metrics_tracker.metrics_history,
+                    save_path=f'memory_usage_epoch_{epoch}.png'
+                )
     
     def _training_step(self, batch) -> torch.Tensor:
         """Single training step"""
