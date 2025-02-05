@@ -570,7 +570,35 @@ model_db.save_model_architecture(
 )
 ```
 
-
+### Network Architecture Diagram
+```
+                                    Task-Specific Columns
+                                    (Progressive Networks)
+                                    
+Input                               ┌─────────────┐
+  │                                 │ Task 1      │
+  │                                 │ Column      │
+  ▼                                │             │
+┌─────────┐    ┌──────────┐       │             │──┐
+│ Feature │    │ External  │       └─────────────┘  │
+│Extractor│───▶│ Memory   │            ▲           │
+└─────────┘    │ (MANN)   │            │           │
+     │         └──────────┘       ┌─────────────┐  │
+     │              ▲            │ Task 2      │  │
+     │              │            │ Column      │  │
+     └──────────────┼────────────▶             │◀─┘
+                    │            │             │
+                    │            └─────────────┘
+                    │                 ▲
+                    │            ┌─────────────┐
+                    │            │ Task N      │
+                    └────────────▶ Column      │
+                                 │             │
+                                 └─────────────┘
+                                        │
+                                        ▼
+                                    Output
+```
 
 ## ⚙️ Configuration Examples
 
@@ -684,7 +712,62 @@ metrics:
     frequency: 100  # Log images every 100 steps
 ```
 
-These configuration files can be loaded in your Python code using:
+#### Network Configuration (network_config.yaml)
+```yaml
+# ./config/network_config.yaml
+feature_extractor:
+  type: "resnet"
+  layers: 18
+  pretrained: true
+  freeze_layers: 5
+
+memory:
+  size: 1000
+  feature_dim: 512
+  trainable: true
+  attention:
+    num_heads: 8
+    dropout: 0.1
+
+task_columns:
+  hidden_dims: [256, 128, 64]
+  activation: "relu"
+  dropout: 0.2
+  lateral_connections: true
+
+ewc:
+  importance_scale: 0.4
+  min_importance_threshold: 0.1
+  update_frequency: 100
+```
+
+#### Training Configuration (training_config.yaml)
+```yaml
+# ./config/training_config.yaml
+training:
+  batch_size: 32
+  epochs: 100
+  learning_rate: 0.001
+  optimizer:
+    type: "adam"
+    weight_decay: 0.0001
+    beta1: 0.9
+    beta2: 0.999
+
+memory_management:
+  update_frequency: 10
+  importance_threshold: 0.5
+  cleanup_frequency: 1000
+  min_memory_keep: 0.2
+
+task_adaptation:
+  warmup_epochs: 5
+  column_growth_rate: 1.2
+  max_columns: 10
+  transfer_strength: 0.3
+```
+
+The library configuration files can be loaded in your Python code using:
 ```python
 import yaml
 
@@ -697,29 +780,31 @@ mlflow_config = load_config('./config/mlflow.yaml')
 ray_config = load_config('./config/ray_config.yaml')
 ```
 
+The network configuration files can be loaded in your Python code using:
+```python
+def load_config(path: str) -> dict:
+    with open(path, 'r') as f:
+        return yaml.safe_load(f)
+
+def initialize_network():
+    network_config = load_config('./config/network_config.yaml')
+    training_config = load_config('./config/training_config.yaml')
+    
+    network = ContinualLearningNetwork(
+        feature_extractor_config=network_config['feature_extractor'],
+        memory_config=network_config['memory'],
+        task_config=network_config['task_columns'],
+        ewc_config=network_config['ewc']
+    )
+    
+    return network, training_config
+```
+
 Each configuration file:
 - Lives in a `config/` directory for organization
 - Uses YAML for readable and maintainable settings
 - Includes commonly needed parameters
 - Can be extended based on project needs
-
-## 🤝 Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request. For major changes, please open an issue first to discuss what you would like to change.
-
-## 📝 License
-
-[MIT License](LICENSE)
-## 📫 Contact
-
-- Project Maintainer: [Your Name]
-- Email: [Your Email]
-- Project Link: [GitHub Repository URL]
-
-## 🙏 Acknowledgments
-
-- List any inspirations, code snippets, etc.
-- Credits to contributors and supporters
 
 ## 🧠 Network Architecture
 
@@ -915,3 +1000,21 @@ for task_id, task_data in tasks.items():
    - Can handle various types of tasks
    - Adaptable memory system
    - Configurable importance mechanisms
+
+## 🤝 Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request. For major changes, please open an issue first to discuss what you would like to change.
+
+## 📝 License
+
+[MIT License](LICENSE)
+## 📫 Contact
+
+- Project Maintainer: [Your Name]
+- Email: [Your Email]
+- Project Link: [GitHub Repository URL]
+
+## 🙏 Acknowledgments
+
+- List any inspirations, code snippets, etc.
+- Credits to contributors and supporters
