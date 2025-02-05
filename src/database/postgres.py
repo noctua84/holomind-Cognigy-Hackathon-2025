@@ -1,8 +1,9 @@
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional
 import psycopg2
 from psycopg2.extras import Json
 from datetime import datetime
 import logging
+import json
 
 class TrainingDatabase:
     """PostgreSQL database for tracking training metrics and experiments"""
@@ -106,4 +107,65 @@ class TrainingDatabase:
                 ''',
                 (experiment_id, task_id, epoch, state_path, Json(metrics))
             )
-        self.conn.commit() 
+        self.conn.commit()
+
+class PostgresConnector:
+    """PostgreSQL connector for storing metrics and model checkpoints"""
+    def __init__(self, config: Dict[str, Any]):
+        self.config = config
+        self.conn = None
+        self.cur = None
+        
+    def connect(self):
+        """Establish connection to PostgreSQL"""
+        try:
+            self.conn = psycopg2.connect(self.config['uri'])
+            self.cur = self.conn.cursor()
+            self._create_tables()
+            return True
+        except Exception as e:
+            print(f"Failed to connect to PostgreSQL: {e}")
+            return False
+            
+    def is_connected(self) -> bool:
+        """Check if connection is active"""
+        return self.conn is not None and self.cur is not None
+        
+    def _create_tables(self):
+        """Create necessary tables if they don't exist"""
+        self.cur.execute("""
+            CREATE TABLE IF NOT EXISTS metrics (
+                key TEXT PRIMARY KEY,
+                data JSONB
+            )
+        """)
+        self.conn.commit()
+        
+    def save(self, key: str, data: Dict):
+        """Save data to PostgreSQL"""
+        if not self.is_connected():
+            raise Exception("Not connected to PostgreSQL")
+            
+        self.cur.execute(
+            "INSERT INTO metrics (key, data) VALUES (%s, %s) ON CONFLICT (key) DO UPDATE SET data = %s",
+            (key, json.dumps(data), json.dumps(data))
+        )
+        self.conn.commit()
+        
+    def get(self, key: str) -> Optional[Dict]:
+        """Retrieve data from PostgreSQL"""
+        if not self.is_connected():
+            raise Exception("Not connected to PostgreSQL")
+            
+        self.cur.execute("SELECT data FROM metrics WHERE key = %s", (key,))
+        result = self.cur.fetchone()
+        return json.loads(result[0]) if result else None
+        
+    def close(self):
+        """Close PostgreSQL connection"""
+        if self.cur:
+            self.cur.close()
+        if self.conn:
+            self.conn.close()
+            self.conn = None
+            self.cur = None 

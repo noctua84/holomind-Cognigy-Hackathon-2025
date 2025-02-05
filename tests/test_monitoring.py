@@ -1,5 +1,7 @@
 import pytest
 from pathlib import Path
+import torch
+import torch.nn as nn
 
 from src.monitoring.metrics import MetricsTracker
 from src.monitoring.visualization import PerformanceVisualizer
@@ -44,4 +46,37 @@ def test_visualization(test_config, temp_dir):
     
     # Test plot generation
     visualizer.plot_task_performance(metrics_history, "test_performance.png")
-    assert (temp_dir / "test_performance.png").exists() 
+    assert (temp_dir / "test_performance.png").exists()
+
+def test_metrics_logging(test_config):
+    """Test metrics logging functionality"""
+    tracker = MetricsTracker(test_config['monitoring'])
+    
+    metrics = {
+        'loss': 0.5,
+        'accuracy': 0.95,
+        'memory_usage': 1000
+    }
+    
+    tracker.log_training_metrics(metrics, 'task1', step=0)
+    history = tracker.metrics_history['task1']
+    assert len(history) == 1
+    assert history[0]['metrics']['accuracy'] == 0.95
+
+def test_gradient_tracking(model, test_config):
+    """Test gradient tracking"""
+    tracker = MetricsTracker(test_config['monitoring'])
+    
+    # Generate some gradients
+    x = torch.randn(1, 784)
+    y = torch.tensor([0])
+    task_id = 'task1'
+    model.add_task(task_id)
+    
+    output = model(x, task_id)
+    loss = nn.CrossEntropyLoss()(output, y)
+    loss.backward()
+    
+    # Track gradients
+    tracker.log_model_gradients(model, step=0)
+    assert len(tracker.gradient_history) > 0 

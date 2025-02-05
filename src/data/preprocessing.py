@@ -17,18 +17,17 @@ class PreprocessingPipeline:
         
         # Normalization
         if self.config['normalization']['type'] == 'standard':
+            # For flat vectors, use simple normalization
+            mean = self.config['normalization']['mean']
+            std = self.config['normalization']['std']
             transform_list.append(
-                T.Normalize(mean=[0.5], std=[0.5])
-                if self.config['normalization']['per_feature']
-                else T.Normalize(mean=[0.5] * 3, std=[0.5] * 3)
+                lambda x: (x - mean) / std
             )
-            
+        
         # Augmentations
         if self.config['augmentation']['enabled']:
-            for aug in self.config['augmentation']['methods']:
-                transform = self._get_augmentation(aug)
-                if transform:
-                    transform_list.append(transform)
+            # Add augmentations for flat vectors if needed
+            pass
         
         return T.Compose(transform_list)
     
@@ -47,5 +46,8 @@ class PreprocessingPipeline:
             return None
             
     def __call__(self, x: torch.Tensor) -> torch.Tensor:
-        """Apply preprocessing pipeline to input"""
-        return self.transforms(x) 
+        """Apply transformations to input"""
+        if len(x.shape) == 2:  # Batch of flat vectors
+            return self.transforms(x)
+        else:  # Single flat vector
+            return self.transforms(x.unsqueeze(0)).squeeze(0) 

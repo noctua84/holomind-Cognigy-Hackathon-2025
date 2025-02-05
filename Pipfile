@@ -4,29 +4,30 @@ verify_ssl = true
 name = "pypi"
 
 [packages]
-torch = ">=1.9.0"
-numpy = ">=1.21.0"
-pandas = ">=1.3.0"
-matplotlib = ">=3.4.0"
-seaborn = ">=0.11.0"
-tensorboard = ">=2.8.0"
-psutil = ">=5.8.0"
-pymongo = ">=4.0.0"
-psycopg2-binary = ">=2.9.0"
-pyyaml = ">=6.0"
-tqdm = ">=4.62.0"
+torch = ">=2.2.0"
+torchvision = ">=0.17.0"
+numpy = ">=1.26.4"
+pandas = ">=2.2.1"
+matplotlib = ">=3.8.3"
+seaborn = {version = ">=0.13.2", extras = ["stats"]}
+tensorboard = ">=2.16.2"
+psutil = ">=5.9.8"
+pymongo = ">=4.6.1"
+psycopg2-binary = ">=2.9.9"
+pyyaml = ">=6.0.1"
+tqdm = ">=4.66.2"
 
 [dev-packages]
-pytest = ">=7.0.0"
-pytest-cov = ">=3.0.0"
-isort = ">=5.10.0"
-pylint = ">=2.14.0"
-pre-commit = ">=2.19.0"
+pytest-cov = "*"
+isort = ">=5.13.2"
+pylint = ">=3.0.3"
+pre-commit = ">=3.6.2"
+pytest = "*"
 
 [requires]
-python_version = "3.13"
+python_version = "3.12"
 
 [scripts]
-test = "pytest"
+test = "python -m pytest"
 lint = "pylint src tests"
-sort = "isort ." 
+sort = "isort ."

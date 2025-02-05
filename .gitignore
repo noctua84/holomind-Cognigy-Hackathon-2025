@@ -1,0 +1,108 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment
+.env
+.venv
+env/
+venv/
+ENV/
+.python-version
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.project
+.pydevproject
+.settings/
+
+# Project specific
+runs/
+checkpoints/
+visualizations/
+mlruns/
+test_runs/
+test_visualizations/
+
+# Data
+data/
+*.h5
+*.pt
+*.pth
+*.ckpt
+*.bin
+
+# Logs and databases
+*.log
+*.sqlite
+*.db
+*.rdb
+logs/
+
+# Test coverage
+.coverage
+htmlcov/
+coverage.xml
+.pytest_cache/
+
+# Documentation
+docs/_build/
+site/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+*.ipynb
+
+# OS specific
+.DS_Store
+Thumbs.db
+*.swp
+.*.swp
+*~
+
+# Environment variables
+.env
+.env.*
+
+# DVC
+.dvc/
+/dvc.lock
+/dvc.yaml
+*.dvc
+
+# MLflow
+mlruns/
+mlflow.db
+
+# Tensorboard
+runs/
+events.out.tfevents.*
+
+# Weights & Biases
+wandb/
+
+# Database dumps
+*.dump
+*.sql
+*.bak 

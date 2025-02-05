@@ -1,6 +1,5 @@
 from typing import Dict, List, Any, Optional
 import matplotlib.pyplot as plt
-import seaborn as sns
 from pathlib import Path
 import numpy as np
 import torch
@@ -13,9 +12,14 @@ class PerformanceVisualizer:
         self.output_dir = Path(config['visualization']['output_dir'])
         self.output_dir.mkdir(parents=True, exist_ok=True)
         
-        # Set style
-        plt.style.use('seaborn')
-        sns.set_palette("husl")
+        # Set style without using seaborn directly
+        plt.style.use('default')  # Use matplotlib default style instead
+        plt.rcParams.update({
+            'figure.figsize': (10, 6),
+            'axes.grid': True,
+            'grid.alpha': 0.3,
+            'lines.linewidth': 2
+        })
         
     def plot_task_performance(self, metrics_history: Dict[str, List[Dict]],
                             save_path: Optional[str] = None):

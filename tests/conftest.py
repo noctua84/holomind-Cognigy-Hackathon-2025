@@ -4,6 +4,8 @@ import os
 from pathlib import Path
 import tempfile
 import shutil
+import psycopg2
+from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 
 from src.utils.config import ConfigLoader
 from src.core.network import ContinualLearningNetwork
@@ -25,15 +27,42 @@ def test_config():
                     'hidden_layers': [512, 256],
                     'activation': 'relu',
                     'dropout': 0.2
+                },
+                'memory': {
+                    'size': 1000,
+                    'feature_dim': 256
+                },
+                'task_columns': {
+                    'hidden_dims': [256, 128, 64],
+                    'activation': 'relu',
+                    'dropout': 0.2
+                }
+            }
+        },
+        'data': {
+            'preprocessing': {
+                'normalize': True,
+                'augment': False,
+                'input_shape': [784],
+                'normalization': {
+                    'type': 'standard',
+                    'mean': 0.0,
+                    'std': 1.0,
+                    'per_feature': False
+                },
+                'augmentation': {
+                    'enabled': False,
+                    'types': []
                 }
             }
         },
         'training': {
+            'epochs': 2,
+            'batch_size': 32,
+            'learning_rate': 0.001,
             'training': {
-                'epochs': 2,
-                'batch_size': 32,
-                'learning_rate': 0.001,
-                'ewc_lambda': 0.4
+                'ewc_lambda': 0.4,
+                'batch_size': 32
             }
         },
         'monitoring': {
@@ -88,4 +117,78 @@ def sample_batch():
 @pytest.fixture
 def model(test_config):
     """Fixture providing initialized model"""
-    return ContinualLearningNetwork(test_config['model']['network']) 
+    return ContinualLearningNetwork(test_config['model']['network'])
+
+@pytest.fixture(scope="session")
+def postgres_db():
+    """Create test database and clean it up after tests"""
+    # Connection parameters for creating database
+    admin_params = {
+        'dbname': 'postgres',
+        'user': 'postgres',
+        'password': 'postgres',
+        'host': 'localhost',
+        'port': '5432'
+    }
+    
+    test_db_name = 'test_holomind'
+    
+    try:
+        # Connect to default postgres database to create test database
+        conn = psycopg2.connect(**admin_params)
+        conn.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)
+        cur = conn.cursor()
+        
+        # Drop test database if it exists
+        cur.execute(f"DROP DATABASE IF EXISTS {test_db_name}")
+        # Create fresh test database
+        cur.execute(f"CREATE DATABASE {test_db_name}")
+        
+        cur.close()
+        conn.close()
+        
+        # Now connect to the test database and create schema
+        test_conn = psycopg2.connect(dbname=test_db_name, **{k:v for k,v in admin_params.items() if k != 'dbname'})
+        test_cur = test_conn.cursor()
+        
+        # Create tables
+        test_cur.execute("""
+            CREATE TABLE IF NOT EXISTS experiments (
+                experiment_id SERIAL PRIMARY KEY,
+                name TEXT NOT NULL,
+                hyperparameters JSONB,
+                status TEXT
+            )
+        """)
+        
+        test_cur.execute("""
+            CREATE TABLE IF NOT EXISTS training_metrics (
+                experiment_id INTEGER REFERENCES experiments(experiment_id),
+                task_id TEXT,
+                epoch INTEGER,
+                metrics JSONB,
+                PRIMARY KEY (experiment_id, task_id, epoch)
+            )
+        """)
+        
+        test_conn.commit()
+        test_cur.close()
+        test_conn.close()
+        
+        # Yield database parameters
+        yield {
+            'dbname': test_db_name,
+            'user': 'postgres',
+            'password': 'postgres',
+            'host': 'localhost',
+            'port': '5432'
+        }
+        
+    finally:
+        # Cleanup: drop test database
+        conn = psycopg2.connect(**admin_params)
+        conn.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)
+        cur = conn.cursor()
+        cur.execute(f"DROP DATABASE IF EXISTS {test_db_name}")
+        cur.close()
+        conn.close() 

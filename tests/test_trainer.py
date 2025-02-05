@@ -7,8 +7,11 @@ from src.core.trainer import ContinualTrainer
 @pytest.fixture
 def trainer(model, test_config):
     """Fixture providing initialized trainer"""
-    optimizer = optim.Adam(model.parameters(), lr=0.001)
-    return ContinualTrainer(model, optimizer, test_config['training'])
+    optimizer = optim.Adam(model.parameters(), lr=test_config['training']['learning_rate'])
+    # Include monitoring config
+    training_config = test_config['training']['training']
+    training_config['monitoring'] = test_config['monitoring']  # Add monitoring config
+    return ContinualTrainer(model, optimizer, training_config)
 
 def test_trainer_initialization(trainer):
     """Test proper trainer initialization"""

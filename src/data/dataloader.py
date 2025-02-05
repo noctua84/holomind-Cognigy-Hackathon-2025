@@ -8,11 +8,16 @@ from .dataset import ContinualDataset
 from .preprocessing import PreprocessingPipeline
 
 class DataManager:
-    """Manages data loading and preprocessing for continual learning"""
+    """Manages data loading and preprocessing"""
     def __init__(self, config: Dict):
         self.config = config
         self.data_dir = Path(config['datasets']['root_dir'])
         self.preprocessor = PreprocessingPipeline(config['preprocessing'])
+        
+        # Store dataloader configuration
+        self.batch_size = config.get('batch_size', 32)
+        self.num_workers = config.get('num_workers', 2)
+        self.shuffle = config.get('shuffle', True)
         
     def get_task_loaders(self, 
                         task_id: str) -> Tuple[DataLoader, Optional[DataLoader], DataLoader]:

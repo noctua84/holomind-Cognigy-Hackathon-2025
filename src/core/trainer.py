@@ -17,7 +17,7 @@ class ContinualTrainer:
         self.config = config
         
         self.current_task = None
-        self.ewc_lambda = config['training']['ewc_lambda']
+        self.ewc_lambda = config['ewc_lambda']
         self.criterion = nn.CrossEntropyLoss()  # Add default criterion
         
         # Initialize monitoring

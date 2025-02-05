@@ -49,4 +49,43 @@ def test_dataset_loading(sample_data):
     x, y, task_id = dataset[0]
     assert isinstance(x, torch.Tensor)
     assert isinstance(y, torch.Tensor)
-    assert task_id == "task1" 
+    assert task_id == "task1"
+
+def test_augmentation_pipeline(test_config):
+    """Test data augmentation pipeline"""
+    test_config['data']['preprocessing']['augmentation']['enabled'] = True
+    pipeline = PreprocessingPipeline(test_config['data']['preprocessing'])
+    
+    x = torch.randn(1, 784)
+    transformed = pipeline(x)
+    assert transformed.shape == x.shape
+
+def test_batch_preprocessing(test_config):
+    """Test batch preprocessing"""
+    pipeline = PreprocessingPipeline(test_config['data']['preprocessing'])
+    
+    batch = torch.randn(32, 784)
+    transformed = pipeline(batch)
+    assert transformed.shape == batch.shape
+    
+    # Test normalization
+    assert torch.abs(transformed.mean()) < 1.0
+    assert torch.abs(transformed.std() - 1.0) < 0.1
+
+def test_dataloader_configuration(test_config):
+    """Test dataloader configuration"""
+    config = {
+        'datasets': {
+            'root_dir': 'data/'
+        },
+        'preprocessing': test_config['data']['preprocessing'],  # Use preprocessing from test_config
+        'batch_size': 32,
+        'num_workers': 2,
+        'shuffle': True
+    }
+    
+    manager = DataManager(config)
+    
+    assert manager.batch_size == 32
+    assert manager.num_workers == 2
+    assert manager.shuffle == True 

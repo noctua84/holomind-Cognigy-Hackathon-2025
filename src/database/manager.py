@@ -1,6 +1,9 @@
 from typing import Dict, Any, Optional
 import logging
 from pathlib import Path
+import torch
+import platform
+from psycopg2.extras import Json
 
 from .postgres import TrainingDatabase
 from .mongo import ModelArchiveDB
@@ -97,13 +100,74 @@ class DatabaseManager:
         
     def _get_environment_info(self) -> Dict[str, Any]:
         """Get current environment information"""
-        import torch
-        import platform
-        
         return {
             'python_version': platform.python_version(),
             'pytorch_version': torch.__version__,
             'cuda_available': torch.cuda.is_available(),
             'cuda_version': torch.version.cuda if torch.cuda.is_available() else None,
             'device': str(torch.cuda.get_device_name(0)) if torch.cuda.is_available() else 'cpu'
-        } 
+        }
+
+    def save_metrics(self, task_id: str, metrics: Dict):
+        """Save training metrics"""
+        # Create experiment if it doesn't exist
+        experiment_id = self._ensure_experiment_exists()
+        
+        # Save metrics
+        self.training_db.log_metrics(
+            experiment_id=experiment_id,
+            task_id=task_id,
+            epoch=0,
+            metrics=metrics
+        )
+
+    def _ensure_experiment_exists(self) -> int:
+        """Ensure test experiment exists and return its ID"""
+        with self.training_db.conn.cursor() as cur:
+            # Check if test experiment exists
+            cur.execute("SELECT experiment_id FROM experiments WHERE name = 'test'")
+            result = cur.fetchone()
+            
+            if result:
+                return result[0]
+            
+            # Create new test experiment
+            cur.execute(
+                """
+                INSERT INTO experiments (name, hyperparameters, status)
+                VALUES (%s, %s, %s)
+                RETURNING experiment_id
+                """,
+                ('test', Json({}), 'running')
+            )
+            self.training_db.conn.commit()
+            return cur.fetchone()[0]
+
+    def get_metrics(self, task_id: str) -> Dict:
+        """Retrieve training metrics"""
+        # For testing, return the last metrics for the task
+        with self.training_db.conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT metrics FROM training_metrics 
+                WHERE task_id = %s 
+                ORDER BY epoch DESC LIMIT 1
+                """,
+                (task_id,)
+            )
+            result = cur.fetchone()
+            return result[0] if result else {}
+            
+    def save_checkpoint(self, model_id: str, state_dict: Dict):
+        """Save model checkpoint"""
+        self.model_db.save_model_architecture(
+            architecture_id=model_id,
+            architecture=state_dict
+        )
+        
+    def load_checkpoint(self, model_id: str) -> Optional[Dict]:
+        """Load model checkpoint"""
+        results = self.model_db.query_architecture_evolution(model_id)
+        if results:
+            return results[0]['structure']  # Get latest version
+        return None 

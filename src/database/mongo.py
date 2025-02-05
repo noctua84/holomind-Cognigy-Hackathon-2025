@@ -1,7 +1,57 @@
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional
 from pymongo import MongoClient
-from datetime import datetime
+from datetime import datetime, UTC
 import logging
+import pymongo
+
+class MongoConnector:
+    """MongoDB connector for storing metrics and model checkpoints"""
+    def __init__(self, config: Dict[str, Any]):
+        self.config = config
+        self.client = None
+        self.db = None
+        
+    def connect(self):
+        """Establish connection to MongoDB"""
+        try:
+            self.client = pymongo.MongoClient(self.config['uri'])
+            self.db = self.client.holomind
+            return True
+        except Exception as e:
+            print(f"Failed to connect to MongoDB: {e}")
+            return False
+            
+    def is_connected(self) -> bool:
+        """Check if connection is active"""
+        return self.client is not None and self.db is not None
+        
+    def save(self, key: str, data: Dict):
+        """Save data to MongoDB"""
+        if not self.is_connected():
+            raise Exception("Not connected to MongoDB")
+            
+        collection = self.db.metrics
+        collection.update_one(
+            {'_id': key},
+            {'$set': data},
+            upsert=True
+        )
+        
+    def get(self, key: str) -> Optional[Dict]:
+        """Retrieve data from MongoDB"""
+        if not self.is_connected():
+            raise Exception("Not connected to MongoDB")
+            
+        collection = self.db.metrics
+        doc = collection.find_one({'_id': key})
+        return doc if doc else None
+        
+    def close(self):
+        """Close MongoDB connection"""
+        if self.client:
+            self.client.close()
+            self.client = None
+            self.db = None
 
 class ModelArchiveDB:
     """MongoDB database for storing model architectures and states"""
@@ -22,7 +72,7 @@ class ModelArchiveDB:
         
         document = {
             'architecture_id': architecture_id,
-            'timestamp': datetime.utcnow(),
+            'timestamp': datetime.now(UTC),
             'structure': architecture,
             'version': 1
         }
@@ -44,7 +94,7 @@ class ModelArchiveDB:
         
         document = {
             'architecture_id': architecture_id,
-            'timestamp': datetime.utcnow(),
+            'timestamp': datetime.now(UTC),
             'state': state,
             'metadata': metadata,
             'training_context': {

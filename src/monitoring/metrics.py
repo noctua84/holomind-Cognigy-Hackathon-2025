@@ -6,6 +6,7 @@ import logging
 from pathlib import Path
 import numpy as np
 from datetime import datetime
+from collections import defaultdict
 
 class MetricsTracker:
     """Tracks and logs training metrics and system performance"""
@@ -14,7 +15,8 @@ class MetricsTracker:
         self.run_dir = Path(config['tensorboard']['log_dir']) / datetime.now().strftime('%Y%m%d_%H%M%S')
         self.writer = SummaryWriter(self.run_dir)
         self.process = psutil.Process()
-        self.metrics_history = {}
+        self.metrics_history = defaultdict(list)
+        self.gradient_history = []
         
     def log_training_metrics(self, metrics: Dict[str, float], 
                            task_id: str, step: int):
@@ -40,13 +42,20 @@ class MetricsTracker:
         
     def log_model_gradients(self, model: torch.nn.Module, step: int):
         """Log model gradient statistics"""
+        gradient_stats = {}
+        
         for name, param in model.named_parameters():
             if param.grad is not None:
-                self.writer.add_histogram(f'gradients/{name}', 
-                                        param.grad.data.cpu().numpy(), step)
+                gradient_stats[name] = {
+                    'mean': param.grad.mean().item(),
+                    'std': param.grad.std().item(),
+                    'norm': param.grad.norm().item()
+                }
                 
-                grad_norm = torch.norm(param.grad.data)
-                self.writer.add_scalar(f'gradient_norms/{name}', grad_norm.item(), step)
+        self.gradient_history.append({
+            'step': step,
+            'stats': gradient_stats
+        })
     
     def log_forgetting_metrics(self, task_performances: Dict[str, float], step: int):
         """Log metrics related to catastrophic forgetting"""

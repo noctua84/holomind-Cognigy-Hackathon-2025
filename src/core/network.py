@@ -43,7 +43,7 @@ class ContinualLearningNetwork(nn.Module):
             return
             
         new_column = TaskColumn(
-            input_dim=self.config['feature_dim'],
+            input_dim=self.config['feature_dim'],  # This will be doubled internally
             hidden_dims=self.config['task_columns']['hidden_dims'],
             output_dim=self.config['output_dim'],
             prev_columns=list(self.task_columns.values())
@@ -69,8 +69,12 @@ class ContinualLearningNetwork(nn.Module):
         
         return output
     
-    def update_importance(self, loss: torch.Tensor):
+    def update_importance(self, loss: torch.Tensor, retain_graph: bool = False):
         """Updates weight importance metrics for EWC"""
+        # Make sure to compute gradients first
+        loss.backward(retain_graph=retain_graph)
+        
+        # Update Fisher information
         for name, param in self.named_parameters():
             if param.grad is not None:
                 fisher = param.grad.data.pow(2)
@@ -78,6 +82,9 @@ class ContinualLearningNetwork(nn.Module):
                     self.fisher_tracker.fisher_diagonal[name] += fisher
                 else:
                     self.fisher_tracker.fisher_diagonal[name] = fisher
+                    
+        # Zero gradients after computing Fisher
+        self.zero_grad()
 
     def prepare_ewc_loss(self, data_loader, criterion):
         """Prepare EWC loss for the next task by computing Fisher diagonal"""
@@ -100,7 +107,7 @@ class TaskColumn(nn.Module):
         super().__init__()
         
         self.layers = nn.ModuleList()
-        current_dim = input_dim
+        current_dim = input_dim * 2  # Double because of concatenated memory features
         
         # Build main layers
         for hidden_dim in hidden_dims:
@@ -109,25 +116,14 @@ class TaskColumn(nn.Module):
             current_dim = hidden_dim
             
         self.output_layer = nn.Linear(current_dim, output_dim)
-        
-        # Setup lateral connections
-        if prev_columns:
-            self.lateral_connections = nn.ModuleList([
-                LateralAdapter(col) for col in prev_columns
-            ])
-        else:
-            self.lateral_connections = None
             
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Forward pass through task column"""
         current = x
         
         for layer in self.layers:
             current = layer(current)
-            # Add lateral connections if available
-            if self.lateral_connections:
-                lateral_sum = sum(adapter(current) for adapter in self.lateral_connections)
-                current = current + lateral_sum
-                
+            
         return self.output_layer(current)
 
 class ExternalMemory(nn.Module):
