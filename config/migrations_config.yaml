@@ -1,0 +1,29 @@
+postgres:
+  migrations_dir: "migrations/postgres"
+  version_table: "schema_version"
+  
+  tables:
+    - experiments
+    - training_metrics
+    - model_states
+    
+  indexes:
+    - table: training_metrics
+      columns: ["experiment_id", "task_id", "epoch"]
+    - table: model_states
+      columns: ["experiment_id", "task_id"]
+
+mongodb:
+  collections:
+    - model_architectures
+    - training_states
+    
+  indexes:
+    - collection: model_architectures
+      fields:
+        - architecture_id: 1
+        - version: -1
+    - collection: training_states
+      fields:
+        - architecture_id: 1
+        - timestamp: -1 

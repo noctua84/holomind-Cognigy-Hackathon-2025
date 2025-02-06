@@ -1,6 +1,8 @@
 from typing import Dict, Optional
 import torch
 import torch.nn as nn
+import numpy as np
+from numba import jit
 
 class ContinualLearningNetwork(nn.Module):
     """
@@ -25,8 +27,8 @@ class ContinualLearningNetwork(nn.Module):
         
         # Replace the fisher tracking with FisherDiagonal
         self.fisher_tracker = FisherDiagonal(self)
-        self.ewc_loss = None  # Will be initialized when needed
-        
+        self.ewc_loss = None
+
     def _build_feature_extractor(self) -> nn.Module:
         """Constructs the shared feature extraction network"""
         return nn.Sequential(
@@ -127,50 +129,48 @@ class TaskColumn(nn.Module):
         return self.output_layer(current)
 
 class ExternalMemory(nn.Module):
-    """External memory system with attention-based reading and writing"""
+    """Memory system using efficient tensor operations"""
     def __init__(self, memory_size: int, feature_dim: int):
         super().__init__()
-        self.memory_size = memory_size
-        self.feature_dim = feature_dim
-        
-        # Initialize memory bank
         self.memory = nn.Parameter(torch.zeros(memory_size, feature_dim))
-        self.usage_weights = nn.Parameter(torch.zeros(memory_size))
+        self.usage_counts = torch.zeros(memory_size)
         
-        # Attention mechanism for memory access
-        self.attention = nn.MultiheadAttention(
-            embed_dim=feature_dim,
-            num_heads=8,
-            batch_first=True
-        )
+    def update(self, features: torch.Tensor, importance: torch.Tensor):
+        """Update memory using dense operations"""
+        # Find least used locations
+        _, indices = torch.topk(self.usage_counts, 
+                              k=features.size(0), 
+                              largest=False)
+        
+        # Update memory directly
+        self.memory.data[indices] = features
+        
+        # Update usage counts
+        self.usage_counts[indices] = importance
         
     def query(self, features: torch.Tensor) -> torch.Tensor:
-        """Query memory using attention mechanism"""
-        # Expand memory to batch size
-        batch_size = features.size(0)
-        expanded_memory = self.memory.unsqueeze(0).expand(batch_size, -1, -1)
+        """Query memory using importance scoring"""
+        # Convert to numpy for numba acceleration
+        features_np = features.detach().cpu().numpy()
+        memory_np = self.memory.detach().cpu().numpy()
         
-        # Apply attention
-        output, _ = self.attention(
-            query=features.unsqueeze(1),
-            key=expanded_memory,
-            value=expanded_memory
-        )
+        # Compute importance scores
+        scores = self._compute_importance_scores(features_np, memory_np)
+        scores = torch.from_numpy(scores).to(features.device)
         
-        return output.squeeze(1)
-    
-    def update(self, features: torch.Tensor, importance: torch.Tensor):
-        """Update memory based on importance of new features"""
-        # Find least used memory locations
-        _, indices = torch.topk(
-            self.usage_weights, 
-            k=features.size(0), 
-            largest=False
-        )
-        
-        # Update memory at selected locations
-        self.memory.data[indices] = features
-        self.usage_weights.data[indices] = importance
+        # Get top k matches
+        _, indices = torch.topk(scores, k=min(self.memory.size(0), features.size(0)))
+        return self.memory[indices]
+
+    @staticmethod
+    @jit(nopython=True)
+    def _compute_importance_scores(features: np.ndarray, memory: np.ndarray) -> np.ndarray:
+        """Compute importance scores using numba-accelerated function"""
+        scores = np.zeros(len(memory))
+        for i in range(len(memory)):
+            diff = features - memory[i]
+            scores[i] = -np.sum(diff * diff)  # Negative L2 distance
+        return scores
 
 class LateralAdapter(nn.Module):
     """Adapter for lateral connections between task columns"""

@@ -1,35 +1,37 @@
-from typing import List, Dict, Any, Optional, Union
+from typing import List, Dict, Any, Optional, Union, Callable
 import torch
 import torch.nn as nn
 import torchvision.transforms as T
 from PIL import Image
 import numpy as np
+from functools import partial
 
 class PreprocessingPipeline:
     """Configurable preprocessing pipeline for input data"""
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: dict):
         self.config = config
         self.transforms = self._build_transforms()
         
-    def _build_transforms(self) -> nn.Module:
-        """Build transformation pipeline from config"""
-        transform_list = []
+    def _build_transforms(self) -> List[Callable]:
+        """Build preprocessing transforms"""
+        transforms = []
         
-        # Normalization
-        if self.config['normalization']['type'] == 'standard':
-            # For flat vectors, use simple normalization
-            mean = self.config['normalization']['mean']
-            std = self.config['normalization']['std']
-            transform_list.append(
-                lambda x: (x - mean) / std
+        if self.config.get('normalization'):
+            norm_config = self.config['normalization']
+            transforms.append(
+                partial(
+                    self._normalize,
+                    mean=norm_config.get('mean', 0.0),
+                    std=norm_config.get('std', 1.0)
+                )
             )
         
-        # Augmentations
-        if self.config['augmentation']['enabled']:
-            # Add augmentations for flat vectors if needed
-            pass
-        
-        return T.Compose(transform_list)
+        return transforms
+    
+    @staticmethod
+    def _normalize(x: torch.Tensor, mean: float, std: float) -> torch.Tensor:
+        """Normalize input tensor"""
+        return (x - mean) / std
     
     def _get_augmentation(self, aug_config: Dict) -> Optional[nn.Module]:
         """Get augmentation transform from config"""
@@ -46,8 +48,7 @@ class PreprocessingPipeline:
             return None
             
     def __call__(self, x: torch.Tensor) -> torch.Tensor:
-        """Apply transformations to input"""
-        if len(x.shape) == 2:  # Batch of flat vectors
-            return self.transforms(x)
-        else:  # Single flat vector
-            return self.transforms(x.unsqueeze(0)).squeeze(0) 
+        """Apply preprocessing transforms"""
+        for transform in self.transforms:
+            x = transform(x)
+        return x 

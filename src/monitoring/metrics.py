@@ -11,34 +11,42 @@ from collections import defaultdict
 class MetricsTracker:
     """Tracks and logs training metrics and system performance"""
     def __init__(self, config: Dict[str, Any]):
+        """Initialize metrics tracker with configuration"""
         self.config = config
-        self.run_dir = Path(config['tensorboard']['log_dir']) / datetime.now().strftime('%Y%m%d_%H%M%S')
-        self.writer = SummaryWriter(self.run_dir)
+        self.metrics_history = {}
+        
+        # Setup tensorboard if enabled
+        self.writer = None
+        if config.get('enabled', False):
+            run_dir = Path(config.get('log_dir', 'runs')) / datetime.now().strftime('%Y%m%d_%H%M%S')
+            run_dir.mkdir(parents=True, exist_ok=True)
+            self.writer = SummaryWriter(log_dir=str(run_dir))
         self.process = psutil.Process()
-        self.metrics_history = defaultdict(list)
         self.gradient_history = []
         
-    def log_training_metrics(self, metrics: Dict[str, float], 
-                           task_id: str, step: int):
-        """Log training metrics to tensorboard"""
-        # Basic training metrics
-        for name, value in metrics.items():
-            if value is not None:  # Skip None values
-                self.writer.add_scalar(f'training/{task_id}/{name}', value, step)
-        
-        # Track memory usage
-        memory_metrics = self._get_memory_metrics()
-        for name, value in memory_metrics.items():
-            self.writer.add_scalar(f'system/memory/{name}', value, step)
-            
-        # Store in history
+    def log_training_metrics(self, metrics: Dict[str, float], task_id: str, step: int):
+        """Log training metrics to history and tensorboard"""
         if task_id not in self.metrics_history:
             self.metrics_history[task_id] = []
-        self.metrics_history[task_id].append({
+        
+        metrics_entry = {
             'step': step,
             'metrics': metrics,
-            'memory': memory_metrics
-        })
+            'memory': self._get_memory_metrics()
+        }
+        
+        self.metrics_history[task_id].append(metrics_entry)
+        
+        # Log to tensorboard if enabled
+        if self.writer:
+            for metric_name, value in metrics.items():
+                if value is not None:
+                    self.writer.add_scalar(f"{task_id}/{metric_name}", value, step)
+            
+            # Log memory metrics
+            for name, value in metrics_entry['memory'].items():
+                if self.writer:
+                    self.writer.add_scalar(f'system/memory/{name}', value, step)
         
     def log_model_gradients(self, model: torch.nn.Module, step: int):
         """Log model gradient statistics"""

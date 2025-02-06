@@ -1,0 +1,40 @@
+site_name: HoloMind Documentation
+theme:
+  name: material
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - search.highlight
+
+nav:
+  - Home: index.md
+  - Getting Started: getting_started.md
+  - Core Concepts: core_concepts.md
+  - Components:
+    - Network: components/network.md
+    - Training: components/training.md
+    - Data: components/data.md
+    - Monitoring: components/monitoring.md
+    - Database: components/database.md
+  - API Reference:
+    - Core: api/core.md
+    - Data: api/data.md
+    - Monitoring: api/monitoring.md
+    - Database: api/database.md
+
+markdown_extensions:
+  - pymdownx.highlight
+  - pymdownx.superfences
+  - pymdownx.tabbed
+  - pymdownx.arithmatex:
+      generic: true
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          setup_commands:
+            - import sys
+            - sys.path.append("src") 

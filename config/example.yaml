@@ -1,0 +1,44 @@
+# Example configuration showing all available options
+model:
+  network:
+    input_dim: 784
+    feature_dim: 256
+    output_dim: 10
+    feature_extractor:
+      hidden_layers: [512, 256]
+      activation: "relu"
+      dropout: 0.2
+    memory:
+      size: 1000
+      feature_dim: 256
+      num_heads: 8
+    task_columns:
+      hidden_dims: [256, 128, 64]
+      activation: "relu"
+      dropout: 0.2
+
+training:
+  epochs: 100
+  batch_size: 32
+  learning_rate: 0.001
+  ewc_lambda: 0.4
+
+monitoring:
+  mlflow:
+    tracking_uri: "sqlite:///mlflow.db"
+    experiment_name: "holomind_experiment"
+  tensorboard:
+    enabled: true
+    log_dir: "runs/"
+  visualization:
+    output_dir: "visualizations/"
+
+database:
+  postgres:
+    dbname: "holomind"
+    user: "postgres"
+    password: "postgres"
+    host: "localhost"
+    port: 5432
+  mongodb:
+    uri: "mongodb://localhost:27017/" 

@@ -6,6 +6,8 @@ import tempfile
 import shutil
 import psycopg2
 from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
+import warnings
+from pydantic import PydanticDeprecatedSince20
 
 from src.utils.config import ConfigLoader
 from src.core.network import ContinualLearningNetwork
@@ -17,68 +19,59 @@ from src.database.manager import DatabaseManager
 @pytest.fixture
 def test_config():
     """Fixture providing test configuration"""
-    config = {
+    return {
+        'version': '1.0.0',
         'model': {
             'network': {
                 'input_dim': 784,
                 'feature_dim': 256,
                 'output_dim': 10,
-                'feature_extractor': {
-                    'hidden_layers': [512, 256],
-                    'activation': 'relu',
-                    'dropout': 0.2
-                },
-                'memory': {
-                    'size': 1000,
-                    'feature_dim': 256
-                },
+                'memory': {'size': 1000, 'feature_dim': 256},
                 'task_columns': {
-                    'hidden_dims': [256, 128, 64],
+                    'hidden_dims': [256, 128],
                     'activation': 'relu',
                     'dropout': 0.2
                 }
             }
         },
         'data': {
+            'datasets': {'root_dir': 'data/'},
             'preprocessing': {
-                'normalize': True,
-                'augment': False,
-                'input_shape': [784],
-                'normalization': {
-                    'type': 'standard',
-                    'mean': 0.0,
-                    'std': 1.0,
-                    'per_feature': False
-                },
-                'augmentation': {
-                    'enabled': False,
-                    'types': []
-                }
-            }
+                'normalization': {'type': 'standard', 'mean': 0.0, 'std': 1.0},
+                'augmentation': {'enabled': False}
+            },
+            'dataloader': {
+                'batch_size': 32,
+                'num_workers': 2,
+                'pin_memory': True,
+                'shuffle': True
+            },
+            'train_split': 0.7,
+            'val_split': 0.15,
+            'test_split': 0.15
         },
         'training': {
             'epochs': 2,
             'batch_size': 32,
             'learning_rate': 0.001,
-            'training': {
-                'ewc_lambda': 0.4,
-                'batch_size': 32
-            }
+            'ewc_lambda': 0.4,
+            'optimizer': {'type': 'adam'}
         },
         'monitoring': {
             'tensorboard': {
                 'enabled': True,
                 'log_dir': 'test_runs/'
             },
+            'mlflow': {
+                'tracking_uri': 'sqlite:///mlflow.db',
+                'experiment_name': 'test'
+            },
             'visualization': {
                 'output_dir': 'test_visualizations/',
-                'plots': {
-                    'task_performance': {'update_frequency': 1}
-                }
+                'plots': {'task_performance': {'update_frequency': 1}}
             }
         }
     }
-    return config
 
 @pytest.fixture
 def temp_dir():
@@ -191,4 +184,27 @@ def postgres_db():
         cur = conn.cursor()
         cur.execute(f"DROP DATABASE IF EXISTS {test_db_name}")
         cur.close()
-        conn.close() 
+        conn.close()
+
+def pytest_configure(config):
+    """Configure pytest"""
+    # Filter out Pydantic deprecation warnings
+    warnings.filterwarnings(
+        "ignore",
+        category=DeprecationWarning,
+        module="pydantic.*"
+    )
+    
+    # Filter out semver deprecation warning
+    warnings.filterwarnings(
+        "ignore",
+        category=PendingDeprecationWarning,
+        module="semver.*"
+    )
+    
+    # Filter out MLflow warnings
+    warnings.filterwarnings(
+        "ignore",
+        category=UserWarning,
+        module="mlflow.*"
+    ) 

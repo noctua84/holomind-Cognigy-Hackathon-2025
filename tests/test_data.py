@@ -88,4 +88,72 @@ def test_dataloader_configuration(test_config):
     
     assert manager.batch_size == 32
     assert manager.num_workers == 2
-    assert manager.shuffle == True 
+    assert manager.shuffle == True
+
+@pytest.fixture
+def data_manager(test_config, temp_dir):
+    test_config['data'] = {
+        'datasets': {'root_dir': str(temp_dir)},
+        'preprocessing': {
+            'normalization': {'type': 'standard', 'mean': 0, 'std': 1},
+            'augmentation': {'enabled': False}
+        },
+        'dataloader': {
+            'batch_size': 32,
+            'num_workers': 0,
+            'pin_memory': False
+        }
+    }
+    return DataManager(test_config['data'])
+
+def test_data_preparation(data_manager, temp_dir):
+    """Test data preparation and versioning"""
+    data = torch.randn(100, 784)
+    targets = torch.randint(0, 10, (100,))
+    task_id = "test_task"
+    
+    data_manager.prepare_task_data(task_id, data, targets)
+    
+    # Check files exist
+    task_dir = temp_dir / task_id
+    assert (task_dir / 'features.pt').exists()
+    assert (task_dir / 'targets.pt').exists()
+    assert (task_dir / 'metadata.yaml').exists()
+
+def test_data_loading(data_manager, temp_dir):
+    """Test data loading functionality"""
+    # First prepare some data
+    data = torch.randn(100, 784)
+    targets = torch.randint(0, 10, (100,))
+    task_id = "test_task"
+    
+    data_manager.prepare_task_data(task_id, data, targets)
+    
+    # Get data loaders
+    train_loader, val_loader, test_loader = data_manager.get_task_loaders(task_id)
+    
+    # Check loaders
+    assert train_loader is not None
+    assert val_loader is not None
+    assert test_loader is not None
+    
+    # Check batch
+    batch = next(iter(train_loader))
+    assert len(batch) == 3  # (data, target, task_id)
+    assert batch[0].shape[1] == 784
+
+def test_preprocessing(test_config):
+    """Test preprocessing pipeline"""
+    config = {
+        'normalization': {'type': 'standard', 'mean': 0, 'std': 1},
+        'augmentation': {'enabled': False}
+    }
+    pipeline = PreprocessingPipeline(config)
+    
+    # Test normalization
+    x = torch.randn(32, 784)
+    transformed = pipeline(x)
+    
+    assert transformed.shape == x.shape
+    assert abs(transformed.mean()) < 0.1
+    assert abs(transformed.std() - 1.0) < 0.1 

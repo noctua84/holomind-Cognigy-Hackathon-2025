@@ -6,36 +6,57 @@
 class ContinualLearningNetwork(nn.Module):
     """Neural network supporting continual learning with progressive architecture"""
     
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: Dict):
         """
         Initialize network with configuration.
         
         Args:
             config: Network configuration dictionary containing:
                 - input_dim: Input dimension
-                - feature_dim: Feature extractor output dimension
+                - feature_dim: Feature dimension for feature extractor
                 - output_dim: Task output dimension
-                - feature_extractor: Feature extractor configuration
+                - memory: Memory configuration (size, feature_dim)
+                - task_columns: Task-specific column configuration
         """
-        
-    def add_task(self, task_id: str) -> None:
+    
+    def add_task(self, task_id: str):
         """
         Add new task column to network.
         
         Args:
             task_id: Unique identifier for the task
         """
-        
-    def forward(self, x: torch.Tensor, task_id: str) -> torch.Tensor:
+    
+    def update_importance(self, loss: torch.Tensor, retain_graph: bool = False):
         """
-        Forward pass for specific task.
+        Updates weight importance metrics for EWC.
         
         Args:
-            x: Input tensor
-            task_id: Task identifier
+            loss: Loss tensor to compute gradients from
+            retain_graph: Whether to retain computation graph
+        """
+
+class ExternalMemory(nn.Module):
+    """Memory system using sparse tensors for efficient storage"""
+    
+    def __init__(self, memory_size: int, feature_dim: int):
+        """
+        Initialize sparse memory system.
+        
+        Args:
+            memory_size: Number of memory slots
+            feature_dim: Dimension of feature vectors
+        """
+    
+    def query(self, features: torch.Tensor) -> torch.Tensor:
+        """
+        Query memory using importance scoring.
+        
+        Args:
+            features: Input features to query with
             
         Returns:
-            Task-specific output
+            Retrieved memory vectors
         """
 ```
 

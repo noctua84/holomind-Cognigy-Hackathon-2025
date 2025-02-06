@@ -1,0 +1,20 @@
+distributed:
+  backend: "torch"
+  num_workers: 4
+  resources:
+    cpu_per_worker: 2
+    gpu_per_worker: 0.5
+    memory_per_worker: "4GB"
+
+optimization:
+  scheduler:
+    type: "asha"
+    max_epochs: 100
+    grace_period: 1
+    reduction_factor: 2
+
+  search:
+    algorithm: "optuna"
+    metric: "loss"
+    mode: "min"
+    num_samples: 100 

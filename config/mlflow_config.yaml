@@ -1,0 +1,25 @@
+tracking:
+  uri: "sqlite:///mlflow.db"
+  experiment_name: "holomind_experiment"
+  
+logging:
+  params:
+    - model.network
+    - training
+    - optimization
+  
+  metrics:
+    - loss
+    - accuracy
+    - memory_usage
+    - ewc_loss
+  
+  artifacts:
+    - models
+    - visualizations
+    - metrics.json
+
+tags:
+  framework: "pytorch"
+  project: "holomind"
+  version: "3.0" 

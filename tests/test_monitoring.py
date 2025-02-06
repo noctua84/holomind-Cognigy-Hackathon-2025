@@ -2,31 +2,34 @@ import pytest
 from pathlib import Path
 import torch
 import torch.nn as nn
+from typing import Dict, Any
 
 from src.monitoring.metrics import MetricsTracker
 from src.monitoring.visualization import PerformanceVisualizer
 
-def test_metrics_tracking(test_config, temp_dir):
+def test_metrics_tracking(test_config):
     """Test metrics tracking functionality"""
-    test_config['monitoring']['tensorboard']['log_dir'] = str(temp_dir)
-    tracker = MetricsTracker(test_config['monitoring'])
-    
-    # Test logging metrics
-    metrics = {
-        'loss': 0.5,
-        'accuracy': 0.85
+    config = {
+        'enabled': True,
+        'log_dir': 'test_runs/'
     }
-    tracker.log_training_metrics(metrics, "task1", step=0)
+    tracker = MetricsTracker(config)
     
-    assert "task1" in tracker.metrics_history
-    assert len(tracker.metrics_history["task1"]) == 1
+    # Track some metrics
+    metrics = {'loss': 0.5, 'accuracy': 0.95}
+    tracker.log_training_metrics(metrics, task_id='task1', step=0)
     
-    tracker.close()
+    assert 'task1' in tracker.metrics_history
+    assert len(tracker.metrics_history['task1']) == 1
+    assert tracker.metrics_history['task1'][0]['metrics']['loss'] == 0.5
 
 def test_visualization(test_config, temp_dir):
     """Test visualization generation"""
-    test_config['monitoring']['visualization']['output_dir'] = str(temp_dir)
-    visualizer = PerformanceVisualizer(test_config['monitoring'])
+    config = {
+        'output_dir': str(temp_dir),
+        'plots': {'task_performance': {'update_frequency': 1}}
+    }
+    visualizer = PerformanceVisualizer(config)
     
     # Create sample metrics history
     metrics_history = {
@@ -45,23 +48,27 @@ def test_visualization(test_config, temp_dir):
     }
     
     # Test plot generation
-    visualizer.plot_task_performance(metrics_history, "test_performance.png")
-    assert (temp_dir / "test_performance.png").exists()
+    save_path = "test_performance.png"
+    visualizer.plot_task_performance(metrics_history, save_path)
+    assert (temp_dir / save_path).exists()
 
 def test_metrics_logging(test_config):
-    """Test metrics logging functionality"""
-    tracker = MetricsTracker(test_config['monitoring'])
-    
-    metrics = {
-        'loss': 0.5,
-        'accuracy': 0.95,
-        'memory_usage': 1000
+    """Test metrics logging to tensorboard"""
+    config = {
+        'enabled': True,
+        'log_dir': 'test_runs/'
     }
+    tracker = MetricsTracker(config)
     
-    tracker.log_training_metrics(metrics, 'task1', step=0)
-    history = tracker.metrics_history['task1']
-    assert len(history) == 1
-    assert history[0]['metrics']['accuracy'] == 0.95
+    # Log metrics
+    metrics = {'loss': 0.5, 'accuracy': 0.95}
+    tracker.log_training_metrics(metrics, task_id='task1', step=0)
+    
+    # Verify writer was created
+    assert tracker.writer is not None
+    
+    # Clean up
+    tracker.close()
 
 def test_gradient_tracking(model, test_config):
     """Test gradient tracking"""

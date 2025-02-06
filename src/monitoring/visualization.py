@@ -8,18 +8,25 @@ import logging
 class PerformanceVisualizer:
     """Generates visualizations for model performance and system metrics"""
     def __init__(self, config: Dict[str, Any]):
+        """Initialize visualizer with configuration"""
         self.config = config
-        self.output_dir = Path(config['visualization']['output_dir'])
+        self.output_dir = Path(config.get('output_dir', 'visualizations'))
         self.output_dir.mkdir(parents=True, exist_ok=True)
         
-        # Set style without using seaborn directly
-        plt.style.use('default')  # Use matplotlib default style instead
+        # Configure plot settings
+        self.plot_config = config.get('plots', {
+            'task_performance': {'update_frequency': 1}
+        })
+        
+        # Setup basic matplotlib style
+        plt.style.use('default')
         plt.rcParams.update({
             'figure.figsize': (10, 6),
             'axes.grid': True,
             'grid.alpha': 0.3,
             'lines.linewidth': 2
         })
+        self.colors = plt.cm.tab10(np.linspace(0, 1, 10))
         
     def plot_task_performance(self, metrics_history: Dict[str, List[Dict]],
                             save_path: Optional[str] = None):

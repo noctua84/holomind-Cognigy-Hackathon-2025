@@ -4,6 +4,8 @@ from pathlib import Path
 import torch
 import platform
 from psycopg2.extras import Json
+import h5py
+from datetime import datetime, UTC
 
 from .postgres import TrainingDatabase
 from .mongo import ModelArchiveDB
@@ -65,22 +67,31 @@ class DatabaseManager:
             checkpoint_dir = Path(self.config['checkpoints']['dir'])
         checkpoint_dir.mkdir(parents=True, exist_ok=True)
         
-        # Save checkpoint file
-        checkpoint_path = checkpoint_dir / f"task_{task_id}_epoch_{epoch}.pt"
-        checkpoint = {
-            'state_dict': state_dict,
-            'metrics': metrics,
-            'task_id': task_id,
-            'epoch': epoch
-        }
-        torch.save(checkpoint, checkpoint_path)
+        # Save large tensors efficiently with h5py
+        h5_path = checkpoint_dir / f"task_{task_id}_epoch_{epoch}.h5"
+        with h5py.File(h5_path, 'w') as f:
+            # Create groups for organization
+            state_group = f.create_group('state_dict')
+            for key, tensor in state_dict.items():
+                state_group.create_dataset(key, data=tensor.cpu().numpy())
+            
+            # Save metadata
+            meta_group = f.create_group('metadata')
+            meta_group.attrs['task_id'] = task_id
+            meta_group.attrs['epoch'] = epoch
+            meta_group.attrs['timestamp'] = str(datetime.now(UTC))
+            
+            # Save metrics as attributes
+            metrics_group = f.create_group('metrics')
+            for key, value in metrics.items():
+                metrics_group.attrs[key] = value
         
         # Record in PostgreSQL
         self.training_db.save_model_state(
             experiment_id=self.current_experiment_id,
             task_id=task_id,
             epoch=epoch,
-            state_path=str(checkpoint_path),
+            state_path=str(h5_path),
             metrics=metrics
         )
         
@@ -90,7 +101,7 @@ class DatabaseManager:
             state={
                 'task_id': task_id,
                 'epoch': epoch,
-                'checkpoint_path': str(checkpoint_path)
+                'checkpoint_path': str(h5_path)
             },
             metadata={
                 'metrics': metrics,

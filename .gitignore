@@ -21,27 +21,67 @@ wheels/
 *.egg
 
 # Virtual Environment
-.env
-.venv
-env/
 venv/
 ENV/
-.python-version
+env/
+.env/
+.venv/
 
 # IDE
 .idea/
 .vscode/
 *.swp
 *.swo
-.project
-.pydevproject
-.settings/
+.DS_Store
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+coverage.xml
+.tox/
+
+# MLflow
+mlruns/
+mlflow.db
+
+# Ray
+ray_results/
+ray_logs/
+*.out
+*.err
+/ray/
+/ray_spill/
+/session_*/
+/runtime_resources*/
+
+# DVC
+.dvc/cache/
+.dvc/tmp/
+.dvc/plots/
+/dvc.lock
+/dvc.yaml
+*.dvc
+!.dvc/config
+
+# Logs
+*.log
+logs/
+tensorboard/
+runs/
+visualizations/
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Documentation
+site/
+docs/_build/
 
 # Project specific
-runs/
 checkpoints/
-visualizations/
-mlruns/
 test_runs/
 test_visualizations/
 
@@ -60,22 +100,11 @@ data/
 *.rdb
 logs/
 
-# Test coverage
-.coverage
-htmlcov/
-coverage.xml
-.pytest_cache/
-
-# Documentation
-docs/_build/
-site/
-
 # Jupyter Notebook
 .ipynb_checkpoints
 *.ipynb
 
 # OS specific
-.DS_Store
 Thumbs.db
 *.swp
 .*.swp
@@ -84,23 +113,6 @@ Thumbs.db
 # Environment variables
 .env
 .env.*
-
-# DVC
-.dvc/
-/dvc.lock
-/dvc.yaml
-*.dvc
-
-# MLflow
-mlruns/
-mlflow.db
-
-# Tensorboard
-runs/
-events.out.tfevents.*
-
-# Weights & Biases
-wandb/
 
 # Database dumps
 *.dump
