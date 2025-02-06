@@ -1,4 +1,4 @@
-"""Monitoring and visualization components"""
+"""Monitoring and visualization tools"""
 
 from .metrics import MetricsTracker
 from .visualization import PerformanceVisualizer

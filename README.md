@@ -39,10 +39,20 @@ Optional dependencies for development:
 
 ### Installation
 
+1. Create a virtual environment:
 ```bash
-git clone https://github.com/yourusername/holomind-v3.git
-cd holomind-v3
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+```
+
+2. Install required packages:
+```bash
 pip install -r requirements.txt
+```
+
+For enhanced visualizations, install optional dependencies:
+```bash
+pip install seaborn
 ```
 
 ## 📖 Documentation

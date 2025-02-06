@@ -1,4 +1,4 @@
-"""Database management components"""
+"""Database connectors and management"""
 
 from .manager import DatabaseManager
 from .postgres import TrainingDatabase

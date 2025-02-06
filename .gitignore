@@ -40,6 +40,7 @@ env/
 htmlcov/
 coverage.xml
 .tox/
+.coverage.*
 
 # MLflow
 mlruns/

@@ -1,0 +1,77 @@
+version: "1.0.0"
+
+model:
+  network:
+    input_dim: 784  # Similar to MNIST dimension
+    feature_dim: 256
+    output_dim: 10  # Number of classes per task
+    memory:
+      size: 1000
+      feature_dim: 256
+    task_columns:
+      hidden_dims: [512, 256]
+      dropout: 0.2
+
+data:
+  datasets:
+    root_dir: "data/"
+  preprocessing:
+    normalization:
+      type: "standard"
+  dataloader:
+    batch_size: 32
+    num_workers: 2
+    pin_memory: true
+    shuffle: true
+  train_split: 0.7
+  val_split: 0.15
+  test_split: 0.15
+
+training:
+  epochs: 10
+  batch_size: 32
+  learning_rate: 0.001
+  ewc_lambda: 0.4  # EWC regularization strength
+  optimizer:
+    type: "adam"
+    weight_decay: 0.0001
+
+monitoring:
+  tensorboard:
+    enabled: true
+    log_dir: "runs/"
+  mlflow:
+    enabled: true
+    tracking_uri: "mlruns"
+    experiment_name: "synthetic_training"
+  visualization:
+    output_dir: "visualizations/"
+    plots:
+      task_performance:
+        update_frequency: 1
+
+system:
+  compute:
+    device: "cuda"  # Will fall back to CPU if CUDA not available
+    precision: "float32"
+  parallel:
+    distributed_training: false
+    num_workers: 2
+
+database:
+  mongo:
+    enabled: true
+    host: "localhost"
+    port: 27017
+    database: "holomind"
+  postgres:
+    enabled: true
+    host: "localhost"
+    port: 5432
+    database: "holomind"
+    user: "postgres"
+    password: "postgres"  # Default postgres password
+
+logging:
+  level: "INFO"
+  directory: "logs/" 

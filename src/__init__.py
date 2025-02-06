@@ -1,4 +1,4 @@
-"""HoloMind v3: A continual learning framework"""
+"""HoloMind - A Continual Learning Framework"""
 
 __version__ = "0.1.0"
 

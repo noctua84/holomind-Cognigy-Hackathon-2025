@@ -1,4 +1,4 @@
-"""Utility functions and helpers"""
+"""Utility functions and configuration management"""
 
 from .config import ConfigLoader
 

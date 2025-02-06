@@ -7,19 +7,76 @@ from psycopg2.extras import Json
 import h5py
 from datetime import datetime, UTC
 
-from .postgres import TrainingDatabase
-from .mongo import ModelArchiveDB
+from .postgres import TrainingDatabase, PostgresConnector
+from .mongo import ModelArchiveDB, MongoConnector
+from .migrations import MigrationManager
+
+logger = logging.getLogger(__name__)
 
 class DatabaseManager:
     """Manages interactions with both PostgreSQL and MongoDB databases"""
     def __init__(self, config: Dict[str, Any]):
         self.config = config
         
-        # Initialize connections
-        self.training_db = TrainingDatabase(config['postgres'])
-        self.model_db = ModelArchiveDB(config['mongodb']['uri'])
+        # Initialize connections only if enabled
+        self.training_db = None
+        self.model_db = None
+        
+        if config.get('postgres', {}).get('enabled', False):
+            self.training_db = TrainingDatabase(config['postgres'])
+        
+        if config.get('mongo', {}).get('enabled', False):
+            mongo_config = config['mongo']
+            # Construct MongoDB URI from config
+            uri = f"mongodb://{mongo_config.get('host', 'localhost')}:{mongo_config.get('port', 27017)}"
+            self.model_db = ModelArchiveDB(
+                uri=uri,
+                database=mongo_config.get('database', 'holomind')
+            )
         
         self.current_experiment_id = None
+        
+    def _ensure_connections(self) -> bool:
+        """Ensure all enabled database connections are working"""
+        success = True
+        
+        if self.training_db:
+            try:
+                # Test PostgreSQL connection
+                with self.training_db.conn.cursor() as cur:
+                    cur.execute("SELECT 1")
+                logger.info("PostgreSQL connection verified")
+            except Exception as e:
+                logger.error(f"PostgreSQL connection failed: {e}")
+                success = False
+        
+        if self.model_db:
+            try:
+                # Test MongoDB connection
+                self.model_db.client.server_info()
+                logger.info("MongoDB connection verified")
+            except Exception as e:
+                logger.error(f"MongoDB connection failed: {e}")
+                success = False
+        
+        return success
+
+    def initialize_databases(self) -> bool:
+        """Initialize and migrate databases"""
+        if not self._ensure_connections():
+            return False
+        
+        # Run migrations
+        migration_manager = MigrationManager(
+            postgres_connector=self.postgres if hasattr(self, 'postgres') else None,
+            mongo_connector=self.mongo if hasattr(self, 'mongo') else None
+        )
+        
+        if not migration_manager.migrate():
+            logger.error("Database migrations failed")
+            return False
+        
+        return True
         
     def start_experiment(self, name: str, model_config: Dict[str, Any]):
         """Start new training experiment"""

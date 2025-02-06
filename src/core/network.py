@@ -1,8 +1,9 @@
-from typing import Dict, Optional
+from typing import Dict, Optional, List
 import torch
 import torch.nn as nn
 import numpy as np
 from numba import jit
+from .memory import ExperienceReplay
 
 class ContinualLearningNetwork(nn.Module):
     """
@@ -44,11 +45,10 @@ class ContinualLearningNetwork(nn.Module):
         if task_id in self.task_columns:
             return
             
-        new_column = TaskColumn(
+        new_column = AdaptiveTaskColumn(
             input_dim=self.config['feature_dim'],  # This will be doubled internally
             hidden_dims=self.config['task_columns']['hidden_dims'],
-            output_dim=self.config['output_dim'],
-            prev_columns=list(self.task_columns.values())
+            output_dim=self.config['output_dim']
         )
         
         self.task_columns[task_id] = new_column
@@ -91,7 +91,7 @@ class ContinualLearningNetwork(nn.Module):
     def prepare_ewc_loss(self, data_loader, criterion):
         """Prepare EWC loss for the next task by computing Fisher diagonal"""
         # Compute Fisher information
-        self.fisher_tracker.compute_fisher(data_loader, criterion)
+        self.fisher_tracker.compute_fisher(data_loader, criterion, self.model.current_task)
         
         # Initialize EWC loss with current Fisher values
         self.ewc_loss = EWCLoss(self, self.fisher_tracker.fisher_diagonal)
@@ -102,31 +102,53 @@ class ContinualLearningNetwork(nn.Module):
             return self.ewc_loss()
         return None
 
-class TaskColumn(nn.Module):
-    """Implementation of a single task column with lateral connections"""
-    def __init__(self, input_dim: int, hidden_dims: list, output_dim: int, 
-                 prev_columns: Optional[list] = None):
+class AdaptiveTaskColumn(nn.Module):
+    """Task-specific column with dynamic expansion"""
+    def __init__(self, input_dim: int, hidden_dims: List[int], output_dim: int):
         super().__init__()
-        
         self.layers = nn.ModuleList()
-        current_dim = input_dim * 2  # Double because of concatenated memory features
+        self.attention = nn.ModuleList()
         
-        # Build main layers
+        # Dynamic layer expansion
+        curr_dim = input_dim * 2  # Double the input dim because of concatenated memory features
         for hidden_dim in hidden_dims:
-            self.layers.append(nn.Linear(current_dim, hidden_dim))
-            self.layers.append(nn.ReLU())
-            current_dim = hidden_dim
+            self.layers.append(nn.Sequential(
+                nn.Linear(curr_dim, hidden_dim),
+                nn.ReLU()
+            ))
+            # Add attention mechanism for selective knowledge transfer
+            self.attention.append(nn.MultiheadAttention(hidden_dim, num_heads=4))
+            curr_dim = hidden_dim
             
-        self.output_layer = nn.Linear(current_dim, output_dim)
+        self.output = nn.Linear(curr_dim, output_dim)
+        self.expansion_threshold = 0.8  # Trigger expansion when capacity > threshold
+
+    def expand_capacity(self, layer_idx: int):
+        """Dynamically expand layer capacity"""
+        layer = self.layers[layer_idx]
+        new_dim = int(layer.out_features * 1.5)  # Increase by 50%
+        
+        # Create expanded layer
+        expanded = nn.Linear(layer.in_features, new_dim)
+        with torch.no_grad():
+            # Copy existing weights
+            expanded.weight[:layer.out_features] = layer.weight
+            expanded.bias[:layer.out_features] = layer.bias
             
+        self.layers[layer_idx] = expanded
+
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Forward pass through task column"""
         current = x
         
-        for layer in self.layers:
+        for layer, attn in zip(self.layers, self.attention):
             current = layer(current)
+            # Apply self-attention
+            current_reshaped = current.unsqueeze(0)  # Add sequence dimension
+            current_attended, _ = attn(current_reshaped, current_reshaped, current_reshaped)
+            current = current_attended.squeeze(0)  # Remove sequence dimension
             
-        return self.output_layer(current)
+        return self.output(current)
 
 class ExternalMemory(nn.Module):
     """Memory system using efficient tensor operations"""
@@ -174,7 +196,7 @@ class ExternalMemory(nn.Module):
 
 class LateralAdapter(nn.Module):
     """Adapter for lateral connections between task columns"""
-    def __init__(self, source_column: TaskColumn):
+    def __init__(self, source_column: AdaptiveTaskColumn):
         super().__init__()
         self.source = source_column
         
@@ -188,7 +210,7 @@ class FisherDiagonal:
         self.fisher_diagonal = {}
         self.parameter_importance = {}
         
-    def compute_fisher(self, data_loader, criterion):
+    def compute_fisher(self, data_loader, criterion, task_id: str):
         # Initialize Fisher diagonal for each parameter
         for name, param in self.model.named_parameters():
             self.fisher_diagonal[name] = torch.zeros_like(param.data)
@@ -196,13 +218,7 @@ class FisherDiagonal:
         self.model.eval()  # Set to evaluation mode
         for batch in data_loader:
             inputs, targets = batch
-            
-            # Forward pass with task_id if it's a batch tuple of 3 elements
-            if len(batch) == 3:
-                inputs, targets, task_id = batch
-                outputs = self.model(inputs, task_id)
-            else:
-                outputs = self.model(inputs, self.model.current_task)
+            outputs = self.model(inputs, task_id)
             
             loss = criterion(outputs, targets)
             
