@@ -2,6 +2,10 @@
 
 HoloMind is an advanced neural network implementation focused on continuous learning and state preservation. The project aims to create an AI system capable of building upon past knowledge while maintaining the ability to learn new information without catastrophic forgetting.
 
+As part of the Hackathon, the project was fully created with Cursor. 
+This way, an AI has created a neural network that can be trained—although it does not yet mitigate catastrophic forgetting. 
+The readme below was created as well by cursor as a project design document to build uppon.
+
 ## 🎯 Key Features
 
 - **Continuous Learning**: Ability to learn and adapt over extended periods without degradation of previously acquired knowledge
