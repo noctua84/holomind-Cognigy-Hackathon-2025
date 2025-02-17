@@ -48,6 +48,14 @@ class MonitoringConfig:
     mlflow: Dict[str, Any]
     visualization: Dict[str, Any]
 
+@dataclass
+class CheckpointConfig:
+    base_dir: Path
+    save_frequency: int = 1
+    keep_last: int = 3
+    save_optimizer: bool = True
+    save_metrics: bool = True
+
 logger = logging.getLogger(__name__)
 
 class ConfigValidator:
@@ -149,11 +157,47 @@ class ConfigValidator:
         )
     
     def get_monitoring_config(self) -> MonitoringConfig:
-        """Get validated monitoring configuration"""
-        if 'monitoring' not in self.validated:
-            self.validate()
+        """Get and validate monitoring configuration"""
+        monitoring = self.validated.get('monitoring', {})
+        
+        # Validate MLflow config
+        mlflow_config = monitoring.get('mlflow', {})
+        if not isinstance(mlflow_config, dict):
+            raise ValueError("MLflow configuration must be a dictionary")
+        
+        # Validate database config
+        db_config = monitoring.get('database', {
+            'url': 'sqlite:///metrics.db',
+            'echo': False
+        })
+        if not isinstance(db_config, dict):
+            raise ValueError("Database configuration must be a dictionary")
+        if 'url' not in db_config:
+            raise ValueError("Database URL must be specified")
+        
         return MonitoringConfig(
-            tensorboard=self.validated['monitoring'].get('tensorboard', {'enabled': False}),
-            mlflow=self.validated['monitoring'].get('mlflow', {}),
-            visualization=self.validated['monitoring'].get('visualization', {})
+            tensorboard=monitoring.get('tensorboard', {'enabled': False}),
+            mlflow=mlflow_config,
+            visualization=monitoring.get('visualization', {})
+        )
+    
+    def get_checkpoint_config(self) -> CheckpointConfig:
+        """Get validated checkpoint configuration"""
+        if self.validated is None:
+            self.validate()
+        
+        checkpoint_config = self.validated.get('checkpoints', {
+            'base_dir': 'checkpoints/',
+            'save_frequency': 1,
+            'keep_last': 3,
+            'save_optimizer': True,
+            'save_metrics': True
+        })
+        
+        return CheckpointConfig(
+            base_dir=Path(checkpoint_config['base_dir']),
+            save_frequency=checkpoint_config.get('save_frequency', 1),
+            keep_last=checkpoint_config.get('keep_last', 3),
+            save_optimizer=checkpoint_config.get('save_optimizer', True),
+            save_metrics=checkpoint_config.get('save_metrics', True)
         ) 

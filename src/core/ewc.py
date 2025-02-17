@@ -19,18 +19,21 @@ class EWC:
     """Elastic Weight Consolidation with adaptive lambda and importance visualization"""
     
     def __init__(self, model: nn.Module, initial_lambda: float = 0.4, 
-                 adaptive_lambda: bool = True, lambda_decay: float = 0.8):
+                 adaptive_lambda: bool = True, lambda_decay: float = 0.95,
+                 importance_scaling: float = 2.0):
         """
         Args:
             model: The neural network model
             initial_lambda: Initial importance of old tasks
             adaptive_lambda: Whether to adapt lambda based on task difficulty
             lambda_decay: Decay factor for lambda between tasks
+            importance_scaling: Scaling factor for task difficulty
         """
         self.model = model
         self.initial_lambda = initial_lambda
         self.adaptive_lambda = adaptive_lambda
         self.lambda_decay = lambda_decay
+        self.importance_scaling = importance_scaling
         
         # Store Fisher information and optimal parameters for each task
         self.fisher_dict: Dict[str, Dict[str, torch.Tensor]] = {}
@@ -93,7 +96,7 @@ class EWC:
             self.fisher_dict[task_id] = fisher_dict
             self.optpar_dict[task_id] = optpar_dict
             
-            # Compute adaptive lambda based on task difficulty
+            # Scale Fisher information based on task difficulty
             if self.adaptive_lambda:
                 task_difficulty = np.mean(initial_losses)
                 self.task_losses[task_id] = initial_losses
@@ -101,11 +104,18 @@ class EWC:
                 # Adjust lambda based on task difficulty and number of previous tasks
                 num_prev_tasks = len(self.fisher_dict) - 1
                 task_lambda = self.initial_lambda * (self.lambda_decay ** num_prev_tasks)
-                task_lambda *= (1 + task_difficulty)
+                
+                # Scale lambda based on task difficulty and importance
+                difficulty_factor = 1 + (task_difficulty * self.importance_scaling)
+                task_lambda *= difficulty_factor
+                
+                # Add progressive scaling for earlier tasks
+                if num_prev_tasks > 0:
+                    task_lambda *= (1 + (num_prev_tasks * 0.2))  # Progressive importance
                 
                 self.task_lambdas[task_id] = task_lambda
                 logger.info(f"Task {task_id} lambda set to {task_lambda:.4f} "
-                           f"(difficulty: {task_difficulty:.4f})")
+                           f"(difficulty: {task_difficulty:.4f}, scaling: {difficulty_factor:.4f})")
             else:
                 self.task_lambdas[task_id] = self.initial_lambda
         

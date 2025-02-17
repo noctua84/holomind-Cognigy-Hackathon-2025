@@ -40,10 +40,15 @@ monitoring:
   tensorboard:
     enabled: true
     log_dir: "runs/"
+  database:
+    url: "sqlite:///metrics.db"
+    echo: false  # SQL query logging
+    pool_size: 5
+    max_overflow: 10
+    pool_timeout: 30
   mlflow:
-    enabled: true
     tracking_uri: "mlruns"
-    experiment_name: "synthetic_training"
+    experiment_name: "continual_learning"
   visualization:
     output_dir: "visualizations/"
     plots:
@@ -74,4 +79,11 @@ database:
 
 logging:
   level: "INFO"
-  directory: "logs/" 
+  directory: "logs/"
+
+checkpoints:
+  base_dir: "checkpoints/"
+  save_frequency: 1  # Save every N epochs
+  keep_last: 3      # Keep last N checkpoints
+  save_optimizer: true
+  save_metrics: true 

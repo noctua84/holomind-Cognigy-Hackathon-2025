@@ -12,6 +12,14 @@ setup(
         "tensorboard",
         "pymongo",
         "psycopg2-binary",
-        "pyyaml"
-    ]
+        "pyyaml",
+        'alembic>=1.7.0',
+    ],
+    entry_points={
+        'console_scripts': [
+            'db-migrate=src.database.migrations.cli:migrate',
+            'db-upgrade=src.database.migrations.cli:upgrade',
+            'db-downgrade=src.database.migrations.cli:downgrade',
+        ],
+    },
 ) 

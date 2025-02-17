@@ -14,6 +14,7 @@ import torch.nn.functional as F
 import logging
 from pathlib import Path
 from datetime import datetime
+from src.core.checkpoint import CheckpointManager
 
 logger = logging.getLogger(__name__)
 
@@ -68,6 +69,19 @@ class ContinualTrainer:
         self.temperature = config.get('training', {}).get('distill_temp', 2.0)
         self.distill_lambda = config.get('training', {}).get('distill_lambda', 0.5)
         self.old_model = None
+        
+        # Initialize checkpoint manager with validated config
+        checkpoint_config = self.config_validator.get_checkpoint_config()
+        self.checkpoint_manager = CheckpointManager(
+            base_dir=checkpoint_config.base_dir,
+            save_frequency=checkpoint_config.save_frequency,
+            keep_last=checkpoint_config.keep_last,
+            save_optimizer=checkpoint_config.save_optimizer,
+            save_metrics=checkpoint_config.save_metrics
+        )
+        
+        # Load latest state if available
+        self._restore_latest_state()
     
     def _setup_distributed(self):
         """Setup distributed training if enabled"""
@@ -121,7 +135,8 @@ class ContinualTrainer:
                     model=self.model,
                     initial_lambda=ewc_lambda,
                     adaptive_lambda=True,
-                    lambda_decay=0.8
+                    lambda_decay=0.95,
+                    importance_scaling=2.0
                 )
                 logger.info(f"Initialized EWC with lambda={ewc_lambda}")
             except Exception as e:
@@ -190,14 +205,16 @@ class ContinualTrainer:
                 'ewc_loss': ewc_loss.item() if epoch > 0 else 0,
                 **self.metrics_tracker._get_memory_metrics()
             }
-            self.metrics_tracker.log_metrics(metrics, step=epoch)
             
-            # Log metrics
-            step = epoch + len(self.metrics_tracker.metrics_history.get(task_id, []))
-            self._log_metrics(metrics, step)
+            # Log metrics using the correct method
+            self.metrics_tracker.log_training_metrics(
+                metrics=metrics,
+                task_id=task_id,
+                step=epoch
+            )
             
             # Log gradients
-            self.metrics_tracker.log_model_gradients(self.model, step)
+            self.metrics_tracker.log_model_gradients(self.model, epoch)
             
             # Generate visualizations periodically
             if epoch % self.validated_config['monitoring']['visualization']['plots']['task_performance']['update_frequency'] == 0:
@@ -234,6 +251,29 @@ class ContinualTrainer:
             # Log additional metrics
             if hasattr(self, 'ewc'):
                 mlflow.log_metric(f"ewc_lambda_{task_id}", self.ewc.task_lambdas[task_id])
+            
+            # Save checkpoint after each epoch
+            state = {
+                'model_state': self.model.state_dict(),
+                'optimizer_state': self.optimizer.state_dict(),
+                'epoch': epoch,
+                'metrics': metrics
+            }
+            if hasattr(self, 'ewc'):
+                state['ewc_state'] = {
+                    'fisher_dict': self.ewc.fisher_dict,
+                    'optpar_dict': self.ewc.optpar_dict,
+                    'task_lambdas': self.ewc.task_lambdas
+                }
+            self.checkpoint_manager.save_checkpoint(state, task_id)
+            
+            # Save training history
+            history = {
+                'metrics': metrics,
+                'epoch': epoch,
+                'timestamp': datetime.now().isoformat()
+            }
+            self.checkpoint_manager.save_history(task_id, history)
         
         # Log final metrics
         final_metrics = {
@@ -347,3 +387,18 @@ class ContinualTrainer:
         
         # No need to remove old files, they'll be overridden when saving new ones
         pass 
+
+    def _restore_latest_state(self):
+        """Restore the latest training state"""
+        latest_task = self.checkpoint_manager.get_latest_task_id()
+        if latest_task:
+            checkpoint = self.checkpoint_manager.load_checkpoint(latest_task)
+            if checkpoint:
+                self.model.load_state_dict(checkpoint['model_state'])
+                self.optimizer.load_state_dict(checkpoint['optimizer_state'])
+                if 'ewc_state' in checkpoint:
+                    self.ewc = EWC(self.model)
+                    self.ewc.fisher_dict = checkpoint['ewc_state']['fisher_dict']
+                    self.ewc.optpar_dict = checkpoint['ewc_state']['optpar_dict']
+                    self.ewc.task_lambdas = checkpoint['ewc_state']['task_lambdas']
+                logger.info(f"Restored state from task {latest_task}") 

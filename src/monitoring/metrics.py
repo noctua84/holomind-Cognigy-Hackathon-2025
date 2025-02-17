@@ -1,182 +1,112 @@
 from typing import Dict, Any, Optional, List
 import torch
-from torch.utils.tensorboard import SummaryWriter
 import psutil
 import logging
 from pathlib import Path
-import numpy as np
 from datetime import datetime
-from collections import defaultdict
-import mlflow
+from src.database import MetricsDB, ModelArtifact
 
 logger = logging.getLogger(__name__)
 
 class MetricsTracker:
-    """Tracks and logs training metrics using MLflow"""
+    """Tracks and logs training metrics using database storage"""
     
     def __init__(self, experiment_name: str, config: Dict[str, Any]):
-        self.config = config
-        self.metrics_history = {}  # History for metrics
-        self.gradient_history = []  # History for gradients
-        self.forgetting_history = {}  # Add history for forgetting metrics
+        self.experiment_name = experiment_name
+        self.metrics_history: Dict[str, List[Dict]] = {}
         
-        # Set up MLflow
-        try:
-            # Create mlruns directory if it doesn't exist
-            Path("mlruns").mkdir(exist_ok=True)
-            
-            # Set tracking URI
-            mlflow.set_tracking_uri(config.get('tracking_uri', 'mlruns'))
-            
-            # Get or create experiment
-            experiment = mlflow.get_experiment_by_name(experiment_name)
-            if experiment is None:
-                self.experiment_id = mlflow.create_experiment(
-                    experiment_name,
-                    artifact_location=str(Path("mlruns").absolute() / experiment_name)
-                )
-            else:
-                self.experiment_id = experiment.experiment_id
-                
-            # Start new run
-            self.run = mlflow.start_run(experiment_id=self.experiment_id)
-            
-            # Log config parameters
-            mlflow.log_params(self._flatten_dict(config))
-            
-            logger.info(f"MLflow tracking initialized: {experiment_name}")
-            
-        except Exception as e:
-            logger.error(f"Failed to initialize MLflow tracking: {e}")
-            raise
-            
-    def _flatten_dict(self, d: Dict, parent_key: str = '') -> Dict:
-        """Flatten nested dictionary for MLflow params"""
-        items = []
-        for k, v in d.items():
-            new_key = f"{parent_key}.{k}" if parent_key else k
-            if isinstance(v, dict):
-                items.extend(self._flatten_dict(v, new_key).items())
-            else:
-                items.append((new_key, v))
-        return dict(items)
+        # Initialize database connection
+        db_url = config.get('database', {}).get('url', 'sqlite:///metrics.db')
+        self.metrics_db = MetricsDB(db_url=db_url)
+        
+        # Create experiment
+        self.experiment_id = self.metrics_db.create_experiment(
+            name=experiment_name,
+            config=config
+        )
+        
+        # Create run
+        self.run_id = self.metrics_db.create_run(
+            experiment_id=self.experiment_id,
+            config=config
+        )
+        
+        logger.info(f"Database tracking initialized: {experiment_name}")
     
-    def log_metrics(self, metrics: Dict[str, float], step: int = None):
-        """Log metrics for current step"""
+    def log_training_metrics(self, metrics: Dict[str, float], task_id: str, step: int):
+        """Log training metrics to database"""
+        # Add memory metrics
+        metrics.update(self._get_memory_metrics())
+        
+        # Store in history
+        if task_id not in self.metrics_history:
+            self.metrics_history[task_id] = []
+        
+        self.metrics_history[task_id].append({
+            'step': step,
+            'metrics': metrics,
+            'timestamp': datetime.now().isoformat()
+        })
+        
+        # Log to database
+        self.metrics_db.log_metrics(
+            task_id=task_id,
+            run_id=self.run_id,
+            epoch=step,
+            step=step,
+            metrics={
+                'training_metrics': metrics,
+                'memory_metrics': self._get_memory_metrics(),
+                'gradient_stats': {}
+            }
+        )
+    
+    def log_model(self, model: torch.nn.Module, name: str):
+        """Log model state to database"""
         try:
-            mlflow.log_metrics(metrics, step=step)
-        except Exception as e:
-            logger.error(f"Failed to log metrics: {e}")
-            
-    def log_model(self, model, name: str):
-        """Log model with input example and signature"""
-        try:
-            # Create example input
-            input_example = torch.randn(1, self.config['model']['network']['input_dim'])
-            
-            # Log model with signature
-            mlflow.pytorch.log_model(
-                model,
-                name,
-                input_example=input_example,
-                registered_model_name=f"{name}_registered"
+            # Save model state
+            state_dict = model.state_dict()
+            self.metrics_db.save_model(
+                run_id=self.run_id,
+                name=name,
+                state_dict=state_dict,
+                metadata={
+                    'architecture': str(model.__class__.__name__),
+                    'timestamp': datetime.now().isoformat()
+                }
             )
         except Exception as e:
             logger.error(f"Failed to log model: {e}")
-            
-    def end_run(self):
-        """End current MLflow run"""
-        try:
-            mlflow.end_run()
-        except Exception as e:
-            logger.error(f"Failed to end MLflow run: {e}")
-
-    def log_training_metrics(self, metrics: Dict[str, float], task_id: str, step: int):
-        """Log training metrics to history and MLflow"""
-        if task_id not in self.metrics_history:
-            self.metrics_history[task_id] = []
-            
-        metrics_entry = {
-            'step': step,
-            'metrics': metrics
-        }
-        
-        self.metrics_history[task_id].append(metrics_entry)
-        
-        # Log to MLflow
-        try:
-            mlflow.log_metrics(
-                {f"{task_id}/{k}": v for k, v in metrics.items() if v is not None},
-                step=step
-            )
-        except Exception as e:
-            logger.warning(f"Failed to log metrics to MLflow: {e}")
     
     def log_model_gradients(self, model: torch.nn.Module, step: int):
-        """Log model gradient statistics to MLflow and history"""
-        gradient_stats = {}
-        
+        """Log gradient statistics to database"""
+        grad_metrics = {}
         for name, param in model.named_parameters():
             if param.grad is not None:
-                gradient_stats[name] = {
-                    'mean': param.grad.mean().item(),
-                    'std': param.grad.std().item(),
-                    'norm': param.grad.norm().item()
-                }
-                
-                # Log to MLflow directly
-                try:
-                    mlflow.log_metrics({
-                        f"gradients/{name}/mean": gradient_stats[name]['mean'],
-                        f"gradients/{name}/std": gradient_stats[name]['std'],
-                        f"gradients/{name}/norm": gradient_stats[name]['norm']
-                    }, step=step)
-                except Exception as e:
-                    logger.warning(f"Failed to log gradient metrics to MLflow: {e}")
+                grad_metrics[f'gradients/{name}/mean'] = param.grad.mean().item()
+                grad_metrics[f'gradients/{name}/std'] = param.grad.std().item()
+                grad_metrics[f'gradients/{name}/norm'] = param.grad.norm().item()
         
-        # Store in history
-        self.gradient_history.append({
-            'step': step,
-            'stats': gradient_stats
-        })
-    
-    def log_forgetting_metrics(self, task_performances: Dict[str, float], step: int):
-        """Log metrics related to catastrophic forgetting"""
-        # Store in history
-        self.forgetting_history[step] = task_performances
-        
-        # Log to MLflow
-        try:
-            metrics = {
-                f"forgetting/{task_id}": performance 
-                for task_id, performance in task_performances.items()
-            }
-            if len(task_performances) > 1:
-                metrics['forgetting/average'] = sum(task_performances.values()) / len(task_performances)
-            mlflow.log_metrics(metrics, step=step)
-        except Exception as e:
-            logger.warning(f"Failed to log forgetting metrics to MLflow: {e}")
+        self.metrics_db.log_gradients(
+            run_id=self.run_id,
+            step=step,
+            gradients=grad_metrics
+        )
     
     def _get_memory_metrics(self) -> Dict[str, float]:
         """Get current memory usage metrics"""
-        try:
-            memory_info = psutil.Process().memory_info()
-            metrics = {
-                'memory/rss': memory_info.rss / (1024 * 1024),  # RSS in MB
-                'memory/vms': memory_info.vms / (1024 * 1024),  # VMS in MB
-            }
-            if torch.cuda.is_available():
-                metrics['memory/gpu'] = torch.cuda.memory_allocated() / (1024 * 1024)
-            mlflow.log_metrics(metrics)
-            return metrics
-        except Exception as e:
-            logger.warning(f"Failed to log memory metrics: {e}")
-            return {}
+        memory_metrics = {}
+        process = psutil.Process()
+        memory_info = process.memory_info()
+        memory_metrics['memory/rss'] = memory_info.rss / (1024 * 1024)
+        memory_metrics['memory/vms'] = memory_info.vms / (1024 * 1024)
+        if torch.cuda.is_available():
+            memory_metrics['memory/gpu'] = torch.cuda.memory_allocated() / (1024 * 1024)
+        return memory_metrics
     
     def close(self):
-        """Clean up resources and end MLflow run"""
+        """Clean up resources"""
         try:
-            if mlflow.active_run():
-                mlflow.end_run()
+            self.metrics_db.complete_run(self.run_id)
         except Exception as e:
-            logger.error(f"Failed to end MLflow run: {e}") 
+            logger.error(f"Failed to close metrics tracker: {e}") 
